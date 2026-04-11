@@ -50,6 +50,19 @@ class LoggingPipeline:
         )
         return log
 
+    @staticmethod
+    def validate_ohlc(
+        open_price: float, high: float, low: float, close: float, volume: float
+    ):
+        if low > high:
+            raise ValueError("Low price cannot be greater than high price.")
+        if not low <= open_price <= high:
+            raise ValueError("Open price must be between low and high.")
+        if not low <= close <= high:
+            raise ValueError("Close price must be between low and high.")
+        if volume < 0:
+            raise ValueError("Volume cannot be negative.")
+
     def save_prediction_log(self, log: pd.DataFrame):
         log.to_csv(self.log_path)
         logger.info(f"Log saved → {self.log_path}")
@@ -166,12 +179,13 @@ class LoggingPipeline:
             raise ValueError(f"Open price missing for {prediction_date} in the log.")
 
         open_price = float(log.loc[prediction_date, "Open"])
+        self.validate_ohlc(open_price, high, low, close, volume)
         actual = int(np.sign(close - open_price))
         logger.info(f"Open={open_price:.4f}  Close={close:.4f}  Gamma={actual}")
 
         log = self.update_log(log, prediction_date, actual)
-        self.save_prediction_log(log)
         self.update_raw_data(prediction_date, open_price, high, low, close, volume)
+        self.save_prediction_log(log)
 
         logger.info(f"=== Logging done: {self.pair} ===")
 

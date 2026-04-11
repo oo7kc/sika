@@ -241,7 +241,7 @@ def log_screen():
 
     high = ask_price("High price")
     low = ask_price("Low price", max_val=high)
-    close = ask_price("Close price")
+    close = ask_price("Close price", min_val=low - 1e-12, max_val=high)
     while True:
         try:
             volume = float(Prompt.ask("[cyan]Volume[/cyan]", default="0"))

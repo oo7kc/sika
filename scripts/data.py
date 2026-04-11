@@ -50,6 +50,7 @@ def prepare_features_target(
     """
     df = data.copy()
     df["Gamma"] = np.sign(df["Close"] - df["Open"])
+    df[selected_features] = df[selected_features].shift(1)
 
     if start_date:
         df = df[df.index >= start_date]

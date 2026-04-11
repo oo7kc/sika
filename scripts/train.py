@@ -6,6 +6,7 @@ from typing import Optional
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.metrics import accuracy_score
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
 
@@ -24,6 +25,7 @@ class TrainingPipeline:
         self.paths = self.config.get_paths(self.pair)
         self.scaler: Optional[MinMaxScaler] = None
         self.model: Optional[MLPClassifier] = None
+        self.metrics: dict = {}
 
     def load_and_preprocess(self) -> tuple[pd.DataFrame, pd.Series]:
         logger.info(f"Loading data for {self.pair}")
@@ -39,13 +41,31 @@ class TrainingPipeline:
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> dict:
         """Scale features, build, and train the model. Returns metadata dict."""
-        logger.info("Fitting MinMaxScaler")
+        if len(X) < 10:
+            raise ValueError(
+                f"Not enough rows to train {self.pair}. Need at least 10 after preprocessing."
+            )
+
+        split_idx = max(int(len(X) * 0.8), 1)
+        if split_idx >= len(X):
+            split_idx = len(X) - 1
+
+        X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
+        y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
+
+        logger.info(
+            f"Chronological split — train={len(X_train)} rows, test={len(X_test)} rows"
+        )
+        logger.info("Fitting MinMaxScaler on training split")
         self.scaler = MinMaxScaler()
-        X_scaled = pd.DataFrame(
-            self.scaler.fit_transform(X), columns=X.columns, index=X.index
+        X_train_scaled = pd.DataFrame(
+            self.scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index
+        )
+        X_test_scaled = pd.DataFrame(
+            self.scaler.transform(X_test), columns=X_test.columns, index=X_test.index
         )
 
-        n_features = X_scaled.shape[1]
+        n_features = X_train_scaled.shape[1]
         n_classes = len(np.unique(y))
         hidden_size = (n_features + n_classes) // 2
 
@@ -63,8 +83,20 @@ class TrainingPipeline:
         )
 
         logger.info("Training model")
-        self.model.fit(X_scaled, y)
+        self.model.fit(X_train_scaled, y_train)
         logger.info(f"Training complete — loss: {self.model.loss_:.6f}")
+
+        train_accuracy = accuracy_score(y_train, self.model.predict(X_train_scaled))
+        test_accuracy = accuracy_score(y_test, self.model.predict(X_test_scaled))
+        self.metrics = {
+            "train_rows": len(X_train),
+            "test_rows": len(X_test),
+            "train_accuracy": train_accuracy,
+            "test_accuracy": test_accuracy,
+        }
+        logger.info(
+            f"Accuracy — train: {train_accuracy:.2%} | holdout: {test_accuracy:.2%}"
+        )
 
         return {
             "pair": self.pair,
@@ -72,6 +104,7 @@ class TrainingPipeline:
             "n_classes": n_classes,
             "hidden_layer_size": hidden_size,
             "feature_names": self.config.SELECTED_FEATURES,
+            "metrics": self.metrics,
         }
 
     def save(self, metadata: dict):

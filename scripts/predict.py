@@ -57,18 +57,23 @@ class PredictionPipeline:
             self.paths["raw_data"], exclude_weekends=not is_crypto(self.pair)
         )
         logger.info(f"Loaded {len(data)} historical records")
-        df = data.copy()
         ts = pd.Timestamp(prediction_date)
-        df.loc[ts, ["Open", "High", "Low", "Close", "Volume"]] = [open_price] * 4 + [
-            0.0
-        ]
-        return calculate_indicators(df.sort_index())
+        history = data[data.index < ts].copy()
+        if history.empty:
+            raise ValueError(
+                f"No completed historical data available before {prediction_date}"
+            )
+        logger.info(
+            f"Using latest completed bar from {history.index.max().date()} for inference"
+        )
+        return calculate_indicators(history.sort_index())
 
     def predict(self, data: pd.DataFrame, prediction_date: date) -> int:
-        ts = pd.Timestamp(prediction_date)
-        if ts not in data.index:
-            raise ValueError(f"Date {prediction_date} not found in prepared data")
-        X = data.loc[[ts], self.feature_names]
+        X = data[self.feature_names].tail(1).dropna()
+        if X.empty:
+            raise ValueError(
+                f"Not enough history to build features for {prediction_date}"
+            )
         X_scaled = pd.DataFrame(
             self.scaler.transform(X), columns=X.columns, index=X.index
         )
@@ -94,9 +99,20 @@ class PredictionPipeline:
             try:
                 existing = pd.read_csv(log_path, index_col=0, parse_dates=[0])
                 existing.index = pd.Index(pd.to_datetime(existing.index).date)
+                if prediction_date in existing.index and not pd.isna(
+                    existing.loc[prediction_date, "Actual"]
+                ):
+                    raise ValueError(
+                        f"Prediction for {prediction_date} is already completed in the log."
+                    )
+                if prediction_date in existing.index:
+                    raise ValueError(
+                        f"Prediction for {prediction_date} already exists in the log."
+                    )
                 log = pd.concat([existing, entry])
-                log = log[~log.index.duplicated(keep="last")]
             except Exception as e:
+                if isinstance(e, ValueError):
+                    raise
                 logger.warning(f"Could not read existing log — starting fresh: {e}")
                 log = entry
         else:
