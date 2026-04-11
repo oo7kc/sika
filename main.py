@@ -24,6 +24,7 @@ from rich.table import Table
 
 import scripts.display as display
 from config import Config
+from scripts.fetch import MarketDataPipeline
 from scripts.log import LoggingPipeline
 from scripts.predict import PredictionPipeline
 from scripts.train import TrainingPipeline
@@ -161,12 +162,24 @@ def predict_screen():
         display.console.print(f"[bold red]✗ No model for {pair}[/bold red]")
         return
 
-    open_price = ask_price("Today's Open price")
     prediction_date = (
         date.today()
         if Confirm.ask("\n[cyan]Use today's date?[/cyan]", default=True)
         else ask_date("Date (YYYY-MM-DD)")
     )
+    if Confirm.ask("[cyan]Fetch open/spot from API?[/cyan]", default=True):
+        try:
+            open_price = MarketDataPipeline(pair=pair).fetch_prediction_open(
+                prediction_date=prediction_date
+            )
+            display.console.print(
+                f"[bold green]✓ API open/spot fetched:[/bold green] {open_price:.4f}"
+            )
+        except Exception as e:
+            display.console.print(f"[bold red]API error:[/bold red] {e}")
+            open_price = ask_price("Today's Open price")
+    else:
+        open_price = ask_price("Today's Open price")
 
     display.console.print(f"\n─ {pair}  {prediction_date}  open={open_price} ─")
     if not Confirm.ask("[bold cyan]Proceed?[/bold cyan]", default=True):
@@ -268,19 +281,34 @@ def log_screen():
             display.console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
 
+def sync_screen():
+    display.console.print("\n[bold cyan]═══ API SYNC MODE ═══[/bold cyan]\n")
+    display.console.print("[bold]Available pairs:[/bold]")
+    pair = pick_pair(cfg.TRADING_PAIRS, "Select a pair to sync")
+    if pair not in cfg.TRADING_PAIRS:
+        display.console.print(f"[bold red]✗ Unsupported pair: {pair}[/bold red]")
+        return
+
+    try:
+        path = MarketDataPipeline(pair=pair).sync_raw_data()
+        display.console.print(f"[bold green]✓ Synced[/bold green] {pair} → {path}")
+    except Exception as e:
+        display.console.print(f"[bold red]Error:[/bold red] {e}")
+
+
 def interactive_mode():
     display.banner()
-    screens = {"1": train_screen, "2": predict_screen, "3": log_screen}
+    screens = {"1": train_screen, "2": predict_screen, "3": log_screen, "4": sync_screen}
     while True:
         display.console.print("\n[bold]What would you like to do?[/bold]")
         display.console.print(
-            "  1. Train Model(s)\n  2. Make Prediction\n  3. Log Actual Values\n  4. Exit"
+            "  1. Train Model(s)\n  2. Make Prediction\n  3. Log Actual Values\n  4. Sync API Data\n  5. Exit"
         )
         choice = Prompt.ask(
-            "\n[cyan]Select[/cyan]", choices=["1", "2", "3", "4"], default="2"
+            "\n[cyan]Select[/cyan]", choices=["1", "2", "3", "4", "5"], default="2"
         )
-        if choice == "4":
-            display.console.print("\n[bold green]Ciao![/bold green]")
+        if choice == "5":
+            display.console.print("\n[bold green]Bye![/bold green]")
             break
         try:
             screens[choice]()
@@ -289,7 +317,7 @@ def interactive_mode():
         except Exception as e:
             display.console.print(f"\n[bold red]Error:[/bold red] {e}")
         if not Confirm.ask("\n[cyan]Perform another operation?[/cyan]", default=True):
-            display.console.print("\n[bold green]Ciao![/bold green]")
+            display.console.print("\n[bold green]Bye![/bold green]")
             break
 
 
@@ -300,7 +328,7 @@ def main():
     parser = argparse.ArgumentParser(description="FX Trading ML Pipeline")
     parser.add_argument(
         "--mode",
-        choices=["train", "predict", "log", "interactive"],
+        choices=["train", "predict", "log", "sync", "interactive"],
         default="interactive",
     )
     parser.add_argument("--pair", type=str, default=None)
@@ -342,13 +370,21 @@ def main():
         run_training(to_train)
 
     elif args.mode == "predict":
-        if not args.pair or args.open is None:
-            display.console.print("[bold red]--pair and --open are required[/bold red]")
+        if not args.pair:
+            display.console.print("[bold red]--pair is required[/bold red]")
             return
         prediction_date = date.fromisoformat(args.date) if args.date else date.today()
         try:
+            open_price = args.open
+            if open_price is None:
+                open_price = MarketDataPipeline(pair=args.pair.upper()).fetch_prediction_open(
+                    prediction_date=prediction_date
+                )
+                display.console.print(
+                    f"[bold green]✓ API open/spot fetched:[/bold green] {open_price:.4f}"
+                )
             result = PredictionPipeline(pair=args.pair.upper()).run(
-                open_price=args.open, prediction_date=prediction_date
+                open_price=open_price, prediction_date=prediction_date
             )
             display.prediction_result(result)
         except Exception as e:
@@ -375,6 +411,19 @@ def main():
             display.logging_result(result)
         except ValueError as e:
             display.console.print(f"[bold red]Error:[/bold red] {e}")
+        except Exception as e:
+            display.console.print(f"[bold red]Error:[/bold red] {e}")
+            traceback.print_exc()
+
+    elif args.mode == "sync":
+        if not args.pair:
+            display.console.print("[bold red]--pair is required[/bold red]")
+            return
+        try:
+            path = MarketDataPipeline(pair=args.pair.upper()).sync_raw_data()
+            display.console.print(
+                f"[bold green]✓ Synced[/bold green] {args.pair.upper()} → {path}"
+            )
         except Exception as e:
             display.console.print(f"[bold red]Error:[/bold red] {e}")
             traceback.print_exc()
