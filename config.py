@@ -21,7 +21,7 @@ class Config:
 
     # Data
     START_DATE = os.getenv("START_DATE", "2020-01-01")
-    AVS_KEY = os.getenv("AVS_KEY", "").strip().strip('"').strip("'")
+    TIINGO_KEY = os.getenv("TIINGO_KEY", "").strip().strip('"').strip("'")
 
     # Training
     RANDOM_STATE = int(os.getenv("RANDOM_STATE", "42"))

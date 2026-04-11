@@ -2,13 +2,13 @@
 
 from datetime import date
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 import pandas as pd
 
 from config import Config
 from scripts.data import is_crypto, load_data
+from scripts.fetch import MarketDataPipeline
 from scripts.logger import get_logger
 
 logger = get_logger(__name__)
@@ -67,6 +67,23 @@ class LoggingPipeline:
         log.to_csv(self.log_path)
         logger.info(f"Log saved → {self.log_path}")
 
+    def try_fetch_actuals(self, prediction_date: date) -> dict | None:
+        """Attempt to fetch actual OHLCV data from Tiingo API.
+
+        Returns dict with {open, high, low, close, volume} if available, else None.
+        """
+        try:
+            pipeline = MarketDataPipeline(pair=self.pair)
+            actual_data = pipeline.fetch_actual_data(prediction_date)
+            if actual_data:
+                logger.info(
+                    f"Fetched actual data from Tiingo API for {prediction_date}"
+                )
+                return actual_data
+        except Exception as e:
+            logger.warning(f"Could not fetch actuals from API: {e}")
+        return None
+
     # / Raw data update — raises on failure so callers know it didn't persist /
 
     def update_raw_data(
@@ -115,7 +132,7 @@ class LoggingPipeline:
 
     # / Accuracy metrics /
 
-    def calculate_accuracy_metrics(self, log: pd.DataFrame) -> Dict:
+    def calculate_accuracy_metrics(self, log: pd.DataFrame) -> dict:
         completed = log[log["Correct"].notna()]
         n = len(completed)
         if n == 0:
@@ -144,7 +161,7 @@ class LoggingPipeline:
             else overall,
         }
 
-    def get_accuracy_by_prediction_type(self, log: pd.DataFrame) -> Dict:
+    def get_accuracy_by_prediction_type(self, log: pd.DataFrame) -> dict:
         completed = log[log["Correct"].notna()]
         return {
             sig: {
@@ -161,11 +178,11 @@ class LoggingPipeline:
     def run(
         self,
         prediction_date: date,
-        high: float,
-        low: float,
-        close: float,
-        volume: float,
-    ) -> Dict:
+        high: float | None = None,
+        low: float | None = None,
+        close: float | None = None,
+        volume: float | None = None,
+    ) -> dict:
         logger.info(f"=== Logging start: {self.pair} | {prediction_date} ===")
 
         log = self.load_prediction_log()
@@ -179,9 +196,38 @@ class LoggingPipeline:
             raise ValueError(f"Open price missing for {prediction_date} in the log.")
 
         open_price = float(log.loc[prediction_date, "Open"])
+
+        # Try to fetch actual data from API if not provided manually
+        data_source = "manual"
+        if high is None or low is None or close is None or volume is None:
+            api_data = self.try_fetch_actuals(prediction_date)
+            if api_data:
+                high = api_data["high"]
+                low = api_data["low"]
+                close = api_data["close"]
+                volume = api_data["volume"]
+                data_source = "api"
+                logger.info("Using actual data from Tiingo API")
+            else:
+                raise ValueError(
+                    f"No actual data available from API for {prediction_date}. "
+                    "Please provide manual OHLCV values."
+                )
+
+        # Validate OHLC values
+        if high is None or low is None or close is None or volume is None:
+            raise ValueError("OHLCV values cannot be None")
+        high = float(high)
+        low = float(low)
+        close = float(close)
+        volume = float(volume)
         self.validate_ohlc(open_price, high, low, close, volume)
+
         actual = int(np.sign(close - open_price))
-        logger.info(f"Open={open_price:.4f}  Close={close:.4f}  Gamma={actual}")
+        logger.info(
+            f"Open={open_price:.4f}  Close={close:.4f}  Gamma={actual} "
+            f"(source: {data_source})"
+        )
 
         log = self.update_log(log, prediction_date, actual)
         self.update_raw_data(prediction_date, open_price, high, low, close, volume)
@@ -197,9 +243,10 @@ class LoggingPipeline:
             "low": low,
             "close": close,
             "volume": volume,
+            "data_source": data_source,
             "predicted": int(log.loc[prediction_date, "Predicted"]),
             "actual": actual,
-            "correct": log.loc[prediction_date, "Correct"] == 1,
+            "correct": bool(log.loc[prediction_date, "Correct"] == 1),
             "metrics": self.calculate_accuracy_metrics(log),
             "accuracy_by_type": self.get_accuracy_by_prediction_type(log),
         }
@@ -214,5 +261,6 @@ if __name__ == "__main__":
         volume=15000,
     )
     print(
-        f"{'CORRECT' if result['correct'] else 'INCORRECT'} — {result['metrics']['overall_accuracy']:.2f}%"
+        f"{'CORRECT' if result['correct'] else 'INCORRECT'} — "
+        f"{result['metrics']['overall_accuracy']:.2f}%"
     )

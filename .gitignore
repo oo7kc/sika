@@ -21,3 +21,6 @@ models/*
 
 reports/*
 !reports/.gitkeep
+
+logs/*
+!logs/.gitkeep

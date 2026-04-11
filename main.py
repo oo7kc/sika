@@ -252,16 +252,48 @@ def log_screen():
         )
         return
 
-    high = ask_price("High price")
-    low = ask_price("Low price", max_val=high)
-    close = ask_price("Close price", min_val=low - 1e-12, max_val=high)
-    while True:
-        try:
-            volume = float(Prompt.ask("[cyan]Volume[/cyan]", default="0"))
-            if volume >= 0:
-                break
-        except ValueError:
-            pass
+    # Try to fetch actual data from Tiingo API first
+    display.console.print(
+        "\n[bold cyan]Attempting to fetch actual data from Tiingo API...[/bold cyan]"
+    )
+    api_data = pipeline.try_fetch_actuals(log_date)
+
+    high = None
+    low = None
+    close = None
+    volume = None
+
+    if api_data:
+        high = api_data["high"]
+        low = api_data["low"]
+        close = api_data["close"]
+        volume = api_data["volume"]
+        display.console.print(
+            f"\n[bold green]✓ API data found for {log_date}:[/bold green]\n"
+            f"  High:   {high:.4f}\n"
+            f"  Low:    {low:.4f}\n"
+            f"  Close:  {close:.4f}\n"
+            f"  Volume: {volume:.0f}"
+        )
+        if not Confirm.ask("\n[cyan]Use API data?[/cyan]", default=True):
+            high = None
+            low = None
+            close = None
+            volume = None
+
+    # If no API data or user rejected it, ask for manual entry
+    if high is None:
+        display.console.print("[bold yellow]Entering manual data[/bold yellow]")
+        high = ask_price("High price")
+        low = ask_price("Low price", max_val=high)
+        close = ask_price("Close price", min_val=low - 1e-12, max_val=high)
+        while True:
+            try:
+                volume = float(Prompt.ask("[cyan]Volume[/cyan]", default="0"))
+                if volume >= 0:
+                    break
+            except ValueError:
+                pass
 
     display.console.print(
         f"\n─ {pair}  {log_date}  H:{high}  L:{low}  C:{close}  V:{volume} ─"
@@ -298,7 +330,12 @@ def sync_screen():
 
 def interactive_mode():
     display.banner()
-    screens = {"1": train_screen, "2": predict_screen, "3": log_screen, "4": sync_screen}
+    screens = {
+        "1": train_screen,
+        "2": predict_screen,
+        "3": log_screen,
+        "4": sync_screen,
+    }
     while True:
         display.console.print("\n[bold]What would you like to do?[/bold]")
         display.console.print(
@@ -377,9 +414,9 @@ def main():
         try:
             open_price = args.open
             if open_price is None:
-                open_price = MarketDataPipeline(pair=args.pair.upper()).fetch_prediction_open(
-                    prediction_date=prediction_date
-                )
+                open_price = MarketDataPipeline(
+                    pair=args.pair.upper()
+                ).fetch_prediction_open(prediction_date=prediction_date)
                 display.console.print(
                     f"[bold green]✓ API open/spot fetched:[/bold green] {open_price:.4f}"
                 )

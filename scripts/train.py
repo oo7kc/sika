@@ -59,7 +59,9 @@ class TrainingPipeline:
         logger.info("Fitting MinMaxScaler on training split")
         self.scaler = MinMaxScaler()
         X_train_scaled = pd.DataFrame(
-            self.scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index
+            self.scaler.fit_transform(X_train),
+            columns=X_train.columns,
+            index=X_train.index,
         )
         X_test_scaled = pd.DataFrame(
             self.scaler.transform(X_test), columns=X_test.columns, index=X_test.index
