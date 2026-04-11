@@ -14,6 +14,7 @@ class Config:
     PROCESSED_DATA_DIR = os.getenv("PROCESSED_DATA_DIR", "data/processed")
     MODEL_DIR = os.getenv("MODEL_DIR", "models")
     REPORTS_DIR = os.getenv("REPORTS_DIR", "reports")
+    LOG_DIR = os.getenv("LOG_DIR", "logs")
 
     # Trading pairs
     TRADING_PAIRS = [p.strip() for p in os.getenv("TRADING_PAIRS", "XAUUSD").split(",")]
@@ -56,5 +57,5 @@ class Config:
     @classmethod
     def create_directories(cls):
         """Ensure all output directories exist."""
-        for d in [cls.PROCESSED_DATA_DIR, cls.MODEL_DIR, cls.REPORTS_DIR]:
+        for d in [cls.PROCESSED_DATA_DIR, cls.MODEL_DIR, cls.REPORTS_DIR, cls.LOG_DIR]:
             Path(d).mkdir(parents=True, exist_ok=True)
