@@ -1,4 +1,4 @@
-"""Training pipeline for fitting ML models on historical data."""
+"""Training pipeline — chronological split, leak-free scaling, accuracy metrics."""
 
 import json
 
@@ -16,83 +16,73 @@ from scripts.logger import get_logger
 
 logger = get_logger(__name__)
 
+_MIN_ROWS = 20
+
 
 class TrainingPipeline:
-    """Pipeline for training and saving ML models on trading data.
-
-    Loads historical OHLCV data, computes technical indicators, prepares
-    features and targets, trains an MLPClassifier, and saves all artifacts.
-    """
+    """Train MLP classifier on forex pairs with chronological split."""
 
     def __init__(self, pair: str | None = None) -> None:
-        """Initialize the training pipeline for a trading pair.
-
-        Args:
-            pair: Trading pair symbol (e.g., "XAUUSD"). If None, uses the
-                first pair from configuration.
-        """
         self.config = Config()
         self.pair = (pair or self.config.TRADING_PAIRS[0]).upper()
         self.paths = self.config.get_paths(self.pair)
         self.scaler: MinMaxScaler | None = None
         self.model: MLPClassifier | None = None
-        self.metrics: dict = {}
 
     def load_and_preprocess(self) -> tuple[pd.DataFrame, pd.Series]:
-        """Load raw data, compute indicators, and prepare features.
-
-        Returns:
-            Tuple of (X, y) where X is features and y is the Gamma target labels.
-
-        Raises:
-            FileNotFoundError: If raw data file doesn't exist.
-            ValueError: If data is insufficient after preprocessing.
-        """
-        logger.info(f"Loading data for {self.pair}")
+        """Load raw data and calculate indicators."""
         data = load_data(
             self.paths["raw_data"], exclude_weekends=not is_crypto(self.pair)
         )
-        logger.info("Computing indicators")
         data = calculate_indicators(data)
-        logger.info("Preparing features and target")
-        return prepare_features_target(
+        X, y = prepare_features_target(
             data, self.config.SELECTED_FEATURES, self.config.START_DATE
         )
+        logger.info(f"Dataset ready — {len(X)} rows, {X.shape[1]} features")
+        return X, y
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> dict[str, object]:
-        """Scale features, build, and train the MLPClassifier model.
+    def _split(
+        self, X: pd.DataFrame, y: pd.Series
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        """Chronological train/test split — no shuffling, no future leakage.
 
-        Performs a chronological 80/20 train/test split, fits the scaler on
-        training data, and trains the model. Computes accuracy metrics on both
-        splits.
-
-        Args:
-            X: Feature matrix.
-            y: Target labels.
-
-        Returns:
-            Metadata dictionary with model architecture and training metrics.
-
-        Raises:
-            ValueError: If fewer than 10 rows available after preprocessing.
+        Uses TRAIN_SPLIT from config (default 0.8). Validates that both splits
+        have enough rows and that all target classes appear in training data.
         """
-        if len(X) < 10:
+        if len(X) < _MIN_ROWS:
             raise ValueError(
-                f"Not enough rows to train {self.pair}. "
-                "Need at least 10 after preprocessing."
+                f"Only {len(X)} rows after preprocessing — need at least "
+                f"{_MIN_ROWS}. Extend your date range or check the raw data file."
             )
 
-        split_idx = max(int(len(X) * 0.8), 1)
-        if split_idx >= len(X):
-            split_idx = len(X) - 1
+        split_idx = int(len(X) * self.config.TRAIN_SPLIT)
+        split_idx = max(1, min(split_idx, len(X) - 1))
 
         X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
         y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
 
+        missing = set(y_test.unique()) - set(y_train.unique())
+        if missing:
+            logger.warning(
+                f"Class(es) {missing} appear in test but not in training split. "
+                "Model will never predict them — consider a wider date range."
+            )
+
         logger.info(
-            f"Chronological split — train={len(X_train)} rows, test={len(X_test)} rows"
+            f"Split — train: {len(X_train)} rows "
+            f"({X_train.index[0].date()} → {X_train.index[-1].date()}), "
+            f"test: {len(X_test)} rows "
+            f"({X_test.index[0].date()} → {X_test.index[-1].date()})"
         )
-        logger.info("Fitting MinMaxScaler on training split")
+        _log_class_distribution("train", y_train)
+        _log_class_distribution("test", y_test)
+
+        return X_train, X_test, y_train, y_test
+
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> dict:
+        """Scale, build, train. Scaler fit on train only — no leakage."""
+        X_train, X_test, y_train, y_test = self._split(X, y)
+
         self.scaler = MinMaxScaler()
         X_train_scaled = pd.DataFrame(
             self.scaler.fit_transform(X_train),
@@ -107,7 +97,6 @@ class TrainingPipeline:
         n_classes = len(np.unique(y))
         hidden_size = (n_features + n_classes) // 2
 
-        logger.info(f"Building MLPClassifier — hidden_size={hidden_size}")
         self.model = MLPClassifier(
             hidden_layer_sizes=(hidden_size,),
             activation=self.config.ACTIVATION,
@@ -120,21 +109,11 @@ class TrainingPipeline:
             early_stopping=self.config.EARLY_STOPPING,
         )
 
-        logger.info("Training model")
         self.model.fit(X_train_scaled, y_train)
-        logger.info(f"Training complete — loss: {self.model.loss_:.6f}")
 
-        train_accuracy = accuracy_score(y_train, self.model.predict(X_train_scaled))
-        test_accuracy = accuracy_score(y_test, self.model.predict(X_test_scaled))
-        self.metrics = {
-            "train_rows": len(X_train),
-            "test_rows": len(X_test),
-            "train_accuracy": train_accuracy,
-            "test_accuracy": test_accuracy,
-        }
-        logger.info(
-            f"Accuracy — train: {train_accuracy:.2%} | holdout: {test_accuracy:.2%}"
-        )
+        train_acc = accuracy_score(y_train, self.model.predict(X_train_scaled))
+        test_acc = accuracy_score(y_test, self.model.predict(X_test_scaled))
+        logger.info(f"Accuracy — train: {train_acc:.2%} | holdout: {test_acc:.2%}")
 
         return {
             "pair": self.pair,
@@ -142,18 +121,17 @@ class TrainingPipeline:
             "n_classes": n_classes,
             "hidden_layer_size": hidden_size,
             "feature_names": self.config.SELECTED_FEATURES,
-            "metrics": self.metrics,
+            "train_split": self.config.TRAIN_SPLIT,
+            "metrics": {
+                "train_rows": len(X_train),
+                "test_rows": len(X_test),
+                "train_accuracy": round(train_acc, 4),
+                "test_accuracy": round(test_acc, 4),
+            },
         }
 
-    def save(self, metadata: dict[str, object]) -> None:
-        """Save trained model, scaler, and metadata to disk.
-
-        Args:
-            metadata: Dictionary with model architecture and training metrics.
-
-        Raises:
-            IOError: If files cannot be written.
-        """
+    def save(self, metadata: dict) -> None:
+        """Save model, scaler, and metadata to disk."""
         self.config.create_directories()
         joblib.dump(self.model, self.paths["model"])
         logger.info(f"Model  → {self.paths['model']}")
@@ -163,21 +141,21 @@ class TrainingPipeline:
             json.dump(metadata, f, indent=2)
         logger.info(f"Meta   → {self.paths['metadata']}")
 
-    def run(self) -> None:
-        """Execute the complete training pipeline.
-
-        Loads data, preprocesses, trains model, saves all artifacts.
-
-        Raises:
-            FileNotFoundError: If raw data doesn't exist.
-            ValueError: If insufficient data for training.
-            IOError: If artifacts cannot be saved.
-        """
+    def run(self) -> dict:
+        """Run full pipeline and return the metadata/metrics dict."""
         logger.info(f"=== Training start: {self.pair} ===")
         X, y = self.load_and_preprocess()
         metadata = self.fit(X, y)
         self.save(metadata)
         logger.info(f"=== Training done:  {self.pair} ===")
+        return metadata
+
+
+def _log_class_distribution(label: str, y: pd.Series) -> None:
+    """Log the count and percentage of each class in a split."""
+    counts = y.value_counts().sort_index()
+    parts = [f"{cls}: {n} ({n / len(y):.0%})" for cls, n in counts.items()]
+    logger.info(f"Class distribution [{label}] — {', '.join(parts)}")
 
 
 if __name__ == "__main__":

@@ -1,60 +1,46 @@
-"""Logging configuration with dual console and file output."""
+"""Centralised logger factory.
+
+Setup with setup_file_logging(); logs to console and rotating file.
+"""
 
 import logging
-import logging.handlers
-from pathlib import Path
+import os
+from logging.handlers import RotatingFileHandler
 
-from config import Config
+_CONSOLE_FMT = "%(asctime)s [%(levelname)s] %(name)s — %(message)s"
+_FILE_FMT = "%(asctime)s [%(levelname)s] %(name)s — %(message)s"
+_DATE_FMT = "%Y-%m-%d %H:%M:%S"
+
+_root = logging.getLogger("sika")
+_root.setLevel(logging.DEBUG)
+
+_console = logging.StreamHandler()
+_console.setLevel(logging.INFO)
+_console.setFormatter(logging.Formatter(_CONSOLE_FMT, _DATE_FMT))
+_root.addHandler(_console)
+
+
+def setup_file_logging(log_dir: str = "logs") -> None:
+    """Attach rotating file handler (1 MB, 5 backups) to root logger."""
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "sika.log")
+
+    if any(isinstance(h, RotatingFileHandler) for h in _root.handlers):
+        return
+
+    file_handler = RotatingFileHandler(
+        log_path,
+        maxBytes=1 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(logging.Formatter(_FILE_FMT, _DATE_FMT))
+    _root.addHandler(file_handler)
+    _root.info(f"File logging active → {log_path}")
+    file_handler.flush()
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Create or retrieve a named logger with console and file handlers.
-
-    Returns a logger configured with both console and file output. Console
-    messages go to stdout in real-time for interactive feedback. File output
-    uses rotating handlers to manage disk space (5MB per file, up to 10 backups).
-
-    Multiple calls with the same name return the same logger instance, so it's
-    safe to call this multiple times. Handlers are only attached on first call.
-
-    Args:
-        name: Logger name, typically __name__ for module-level loggers.
-
-    Returns:
-        Configured Logger instance with handlers ready to use.
-
-    Example:
-        >>> logger = get_logger(__name__)
-        >>> logger.info("Training started")
-        >>> logger.warning("Low memory available")
-
-    Note:
-        Log files are stored in logs/sika.log with automatic rotation.
-        Each file grows to 5MB before the next backup is created.
-        Up to 10 backup files are retained.
-    """
-    logger = logging.getLogger(name)
-    if not logger.handlers:
-        log_dir = Path(Config.LOG_DIR)
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        formatter = logging.Formatter(
-            "%(asctime)s [%(levelname)s] %(name)s — %(message)s", "%Y-%m-%d %H:%M:%S"
-        )
-
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
-
-        log_file = log_dir / "sika.log"
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_file,
-            maxBytes=5 * 1024 * 1024,
-            backupCount=10,
-        )
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-
-        logger.setLevel(logging.INFO)
-
-    return logger
+    """Return a child logger inheriting root's handlers."""
+    return _root.getChild(name)

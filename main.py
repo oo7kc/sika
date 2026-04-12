@@ -1,18 +1,21 @@
-"""CLI entry point and interactive menu for the FX Trading ML Pipeline.
+"""CLI entry point — routing only. All display is in scripts/display.py.
 
 Modes:
     interactive  — prompted menu (default)
     train        — train one or all pairs
     predict      — make a prediction for a pair
     log          — record actual values and update accuracy
-    sync         — synchronize raw data from Tiingo API
+    sync         — fetch latest data from Tiingo for one or all pairs
 
 Examples:
     python main.py
+    python main.py --mode sync --all
     python main.py --mode train --all
+    python main.py --mode predict --pair XAUUSD
     python main.py --mode predict --pair XAUUSD --open 2650.50
-    python main.py --mode log --pair XAUUSD --date 2024-11-22 --high 2651 --low 2645
-    --close 2648
+    python main.py --mode log --pair XAUUSD --date 2024-11-22
+    python main.py --mode log --pair XAUUSD --date 2024-11-22 \
+        --high 2651 --low 2645 --close 2648
 """
 
 import argparse
@@ -20,35 +23,24 @@ import traceback
 from datetime import date
 from pathlib import Path
 
-from rich import box
 from rich.prompt import Confirm, Prompt
-from rich.table import Table
 
 import scripts.display as display
 from config import Config
-from scripts.fetch import MarketDataPipeline
 from scripts.log import LoggingPipeline
+from scripts.logger import setup_file_logging
 from scripts.predict import PredictionPipeline
 from scripts.train import TrainingPipeline
 
 cfg = Config()
+setup_file_logging(cfg.LOGS_DIR)
 
 
 def available_pairs() -> list[str]:
-    """Get list of trading pairs with available raw data files.
-
-    Returns:
-        List of pair symbols that have data in RAW_DATA_DIR.
-    """
     return [p for p in cfg.TRADING_PAIRS if Path(cfg.get_paths(p)["raw_data"]).exists()]
 
 
 def trained_pairs() -> list[str]:
-    """Get list of trading pairs with trained models.
-
-    Returns:
-        List of pair symbols that have both model and scaler files.
-    """
     return [
         p
         for p in cfg.TRADING_PAIRS
@@ -58,27 +50,10 @@ def trained_pairs() -> list[str]:
 
 
 def pairs_with_logs() -> list[str]:
-    """Get list of trading pairs with prediction logs.
-
-    Returns:
-        List of pair symbols that have a prediction log CSV.
-    """
     return [p for p in cfg.TRADING_PAIRS if Path(cfg.get_paths(p)["log"]).exists()]
 
 
 def pick_pair(options: list[str], prompt: str) -> str:
-    """Interactive prompt to select a trading pair.
-
-    Displays numbered list of options and allows user to either select one
-    or enter a custom pair.
-
-    Args:
-        options: List of pair symbols to display as choices.
-        prompt: Prompt text to display to user.
-
-    Returns:
-        Selected or entered trading pair symbol (uppercase).
-    """
     for i, p in enumerate(options, 1):
         display.console.print(f"  {i}. {p}")
     display.console.print(f"  {len(options) + 1}. Custom pair")
@@ -94,18 +69,6 @@ def pick_pair(options: list[str], prompt: str) -> str:
 
 
 def ask_price(label: str, min_val: float = 0.0, max_val: float = float("inf")) -> float:
-    """Interactive prompt for price input with validation.
-
-    Loops until user enters a valid price within the specified range.
-
-    Args:
-        label: Prompt label to display.
-        min_val: Minimum allowed price (exclusive).
-        max_val: Maximum allowed price (inclusive).
-
-    Returns:
-        Valid price as a float.
-    """
     while True:
         try:
             v = float(Prompt.ask(f"[cyan]{label}[/cyan]"))
@@ -117,16 +80,6 @@ def ask_price(label: str, min_val: float = 0.0, max_val: float = float("inf")) -
 
 
 def ask_date(prompt: str) -> date:
-    """Interactive prompt for date input in ISO format.
-
-    Loops until user enters a valid YYYY-MM-DD date.
-
-    Args:
-        prompt: Prompt text to display.
-
-    Returns:
-        Parsed date object.
-    """
     while True:
         try:
             return date.fromisoformat(Prompt.ask(f"[cyan]{prompt}[/cyan]"))
@@ -135,18 +88,10 @@ def ask_date(prompt: str) -> date:
 
 
 def run_training(pairs: list[str]) -> None:
-    """Execute training pipeline for multiple pairs.
-
-    Trains models sequentially, reporting success/failure for each pair.
-
-    Args:
-        pairs: List of pair symbols to train.
-    """
     ok, fail = 0, 0
     for i, pair in enumerate(pairs, 1):
-        display.console.print(
-            f"\n{'=' * 50}\nTraining {i}/{len(pairs)}: {pair}\n{'=' * 50}\n"
-        )
+        sep = "=" * 50
+        display.console.print(f"\n{sep}\nTraining {i}/{len(pairs)}: {pair}\n{sep}\n")
         try:
             TrainingPipeline(pair=pair).run()
             display.console.print(f"\n[bold green]✓ Trained {pair}[/bold green]")
@@ -156,26 +101,59 @@ def run_training(pairs: list[str]) -> None:
             fail += 1
             if Confirm.ask("[dim]Show traceback?[/dim]", default=False):
                 display.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+    msg = f"\n[green]✓ OK: {ok}[/green]"
+    if fail:
+        msg += f"   [red]✗ Failed: {fail}[/red]"
+    display.console.print(msg)
 
-    display.console.print(f"\n{'=' * 50}")
-    display.console.print(
-        f"[green]✓ OK: {ok}[/green]"
-        + (f"   [red]✗ Failed: {fail}[/red]" if fail else "")
-    )
-    display.console.print(f"{'=' * 50}\n")
+
+def run_sync(pairs: list[str]) -> None:
+    from scripts.fetch import MarketDataPipeline
+
+    ok, fail = 0, 0
+    for pair in pairs:
+        try:
+            path = MarketDataPipeline(pair).sync_raw_data()
+            display.console.print(f"[bold green]✓ {pair}[/bold green] synced → {path}")
+            ok += 1
+        except Exception as e:
+            display.console.print(f"[bold red]✗ {pair} sync failed:[/bold red] {e}")
+            fail += 1
+    msg = f"\n[green]✓ Synced: {ok}[/green]"
+    if fail:
+        msg += f"   [red]✗ Failed: {fail}[/red]"
+    display.console.print(msg)
+
+
+def sync_screen() -> None:
+    display.console.print("\n[bold cyan]═══ SYNC DATA ═══[/bold cyan]\n")
+    if not cfg.TIINGO_KEY:
+        display.console.print(
+            "[bold red]✗ TIINGO_KEY not set in .env — cannot sync.[/bold red]"
+        )
+        return
+
+    display.console.print("[bold green]✓ Tiingo API key found[/bold green]\n")
+    if Confirm.ask("[cyan]Sync all configured pairs?[/cyan]", default=True):
+        pairs = cfg.TRADING_PAIRS
+    else:
+        display.console.print("[bold]Select pair:[/bold]")
+        pair = pick_pair(cfg.TRADING_PAIRS, "Select a pair to sync")
+        pairs = [pair]
+
+    if Confirm.ask("[bold cyan]Proceed?[/bold cyan]", default=True):
+        run_sync(pairs)
 
 
 def train_screen() -> None:
-    """Interactive training mode screen.
-
-    Displays available data, lets user select pairs to train,
-    then runs training pipeline.
-    """
     display.console.print("\n[bold cyan]═══ TRAINING MODE ═══[/bold cyan]\n")
     pairs = available_pairs()
     if not pairs:
         display.console.print(
             f"[bold red]✗ No data files found in {cfg.RAW_DATA_DIR}[/bold red]"
+        )
+        display.console.print(
+            "[yellow]Run Sync Data first to fetch data from Tiingo.[/yellow]"
         )
         return
 
@@ -199,11 +177,6 @@ def train_screen() -> None:
 
 
 def predict_screen() -> None:
-    """Interactive prediction mode screen.
-
-    Displays trained models, lets user select pair and price,
-    then runs prediction and displays result.
-    """
     display.console.print("\n[bold cyan]═══ PREDICTION MODE ═══[/bold cyan]\n")
     pairs = trained_pairs()
     if not pairs:
@@ -217,38 +190,39 @@ def predict_screen() -> None:
     )
     display.console.print("[bold]Select pair:[/bold]")
     pair = pick_pair(pairs, "Select a pair")
-    if pair not in pairs and not Path(cfg.get_paths(pair)["model"]).exists():
-        display.console.print(f"[bold red]✗ No model for {pair}[/bold red]")
-        return
 
     prediction_date = (
         date.today()
         if Confirm.ask("\n[cyan]Use today's date?[/cyan]", default=True)
         else ask_date("Date (YYYY-MM-DD)")
     )
-    if Confirm.ask("[cyan]Fetch open/spot from API?[/cyan]", default=True):
+
+    open_price = None
+    if cfg.TIINGO_KEY:
         try:
-            open_price = MarketDataPipeline(pair=pair).fetch_prediction_open(
-                prediction_date=prediction_date
-            )
+            from scripts.fetch import MarketDataPipeline
+
+            mdp = MarketDataPipeline(pair)
+            open_price = mdp.fetch_open_for_date(prediction_date)
             display.console.print(
-                f"[bold green]✓ API open/spot fetched:[/bold green] {open_price:.4f}"
+                f"\n[dim]Auto-fetched open price:[/dim] [cyan]{open_price:.4f}[/cyan]"
             )
         except Exception as e:
-            display.console.print(f"[bold red]API error:[/bold red] {e}")
-            open_price = ask_price("Today's Open price")
-    else:
+            display.console.print(
+                f"[yellow]Auto-fetch failed ({e}) — enter price manually.[/yellow]"
+            )
+
+    if open_price is None:
         open_price = ask_price("Today's Open price")
 
-    display.console.print(f"\n─ {pair}  {prediction_date}  open={open_price} ─")
+    display.console.print(f"\n─ {pair}  {prediction_date}  open={open_price:.4f} ─")
     if not Confirm.ask("[bold cyan]Proceed?[/bold cyan]", default=True):
         display.console.print("[yellow]Cancelled.[/yellow]")
         return
 
     try:
-        result = PredictionPipeline(pair=pair).run(
-            open_price=open_price, prediction_date=prediction_date
-        )
+        pipeline = PredictionPipeline(pair=pair)
+        result = pipeline.run(open_price=open_price, prediction_date=prediction_date)
         display.prediction_result(result)
     except Exception as e:
         display.console.print(f"\n[bold red]Error:[/bold red] {e}")
@@ -257,11 +231,6 @@ def predict_screen() -> None:
 
 
 def log_screen() -> None:
-    """Interactive logging mode screen.
-
-    Displays pending predictions, lets user select date to log,
-    fetches or manually enters actual OHLCV, logs result, and updates accuracy.
-    """
     display.console.print("\n[bold cyan]═══ LOGGING MODE ═══[/bold cyan]\n")
     pairs = pairs_with_logs()
     if not pairs:
@@ -291,21 +260,21 @@ def log_screen() -> None:
 
     if pending.empty:
         display.console.print("\n[bold yellow]No pending predictions.[/bold yellow]")
-        display.accuracy_metrics(
-            pair,
-            pipeline.calculate_accuracy_metrics(log),
-            pipeline.get_accuracy_by_prediction_type(log),
-        )
+        metrics = pipeline.calculate_accuracy_metrics(log)
+        by_type = pipeline.get_accuracy_by_prediction_type(log)
+        display.accuracy_metrics(pair, metrics, by_type)
         return
+
+    from rich import box
+    from rich.table import Table
 
     t = Table(show_header=True, header_style="bold cyan", box=box.SIMPLE)
     t.add_column("Date", style="cyan")
     t.add_column("Predicted", style="yellow")
     for pred_date, row in pending.iterrows():
         sig = int(row["Predicted"])
-        t.add_row(
-            str(pred_date), display.SIGNAL_LABELS.get(sig, {}).get("short", str(sig))
-        )
+        label = display.SIGNAL_LABELS.get(sig, {}).get("short", str(sig))
+        t.add_row(str(pred_date), label)
     display.console.print("\n[bold]Pending:[/bold]")
     display.console.print(t)
 
@@ -316,39 +285,32 @@ def log_screen() -> None:
         )
         return
 
-    display.console.print(
-        "\n[bold cyan]Attempting to fetch actual data from Tiingo API...[/bold cyan]"
-    )
-    api_data = pipeline.try_fetch_actuals(log_date)
+    high = low = close = volume = None
+    if cfg.TIINGO_KEY:
+        try:
+            from scripts.fetch import MarketDataPipeline
 
-    high = None
-    low = None
-    close = None
-    volume = None
+            mdp = MarketDataPipeline(pair)
+            actuals = mdp.fetch_actuals_for_date(log_date)
+            if actuals:
+                high = actuals["high"]
+                low = actuals["low"]
+                close = actuals["close"]
+                volume = actuals["volume"]
+                display.console.print(
+                    f"\n[dim]Auto-fetched actuals:[/dim] "
+                    f"H=[cyan]{high:.4f}[/cyan]  L=[cyan]{low:.4f}[/cyan]  "
+                    f"C=[cyan]{close:.4f}[/cyan]  V=[cyan]{volume:.0f}[/cyan]"
+                )
+        except Exception as e:
+            display.console.print(
+                f"[yellow]Auto-fetch failed ({e}) — enter values manually.[/yellow]"
+            )
 
-    if api_data:
-        high = api_data["high"]
-        low = api_data["low"]
-        close = api_data["close"]
-        volume = api_data["volume"]
-        display.console.print(
-            f"\n[bold green]✓ API data found for {log_date}:[/bold green]\n"
-            f"  High:   {high:.4f}\n"
-            f"  Low:    {low:.4f}\n"
-            f"  Close:  {close:.4f}\n"
-            f"  Volume: {volume:.0f}"
-        )
-        if not Confirm.ask("\n[cyan]Use API data?[/cyan]", default=True):
-            high = None
-            low = None
-            close = None
-            volume = None
-
-    if high is None:
-        display.console.print("[bold yellow]Entering manual data[/bold yellow]")
+    if None in (high, low, close):
         high = ask_price("High price")
         low = ask_price("Low price", max_val=high)
-        close = ask_price("Close price", min_val=low - 1e-12, max_val=high)
+        close = ask_price("Close price")
         while True:
             try:
                 volume = float(Prompt.ask("[cyan]Volume[/cyan]", default="0"))
@@ -375,49 +337,25 @@ def log_screen() -> None:
             display.console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
 
-def sync_screen() -> None:
-    """Interactive API sync mode screen.
-
-    Lets user select a pair and syncs raw data from Tiingo API.
-    """
-    display.console.print("\n[bold cyan]═══ API SYNC MODE ═══[/bold cyan]\n")
-    display.console.print("[bold]Available pairs:[/bold]")
-    pair = pick_pair(cfg.TRADING_PAIRS, "Select a pair to sync")
-    if pair not in cfg.TRADING_PAIRS:
-        display.console.print(f"[bold red]✗ Unsupported pair: {pair}[/bold red]")
-        return
-
-    try:
-        path = MarketDataPipeline(pair=pair).sync_raw_data()
-        display.console.print(f"[bold green]✓ Synced[/bold green] {pair} → {path}")
-    except Exception as e:
-        display.console.print(f"[bold red]Error:[/bold red] {e}")
-
-
 def interactive_mode() -> None:
-    """Run the interactive menu loop.
-
-    Displays banner and menu, lets user select operation (train, predict,
-    log, sync), and loops until user chooses to exit.
-    """
     display.banner()
     screens = {
-        "1": train_screen,
-        "2": predict_screen,
-        "3": log_screen,
-        "4": sync_screen,
+        "1": sync_screen,
+        "2": train_screen,
+        "3": predict_screen,
+        "4": log_screen,
     }
     while True:
         display.console.print("\n[bold]What would you like to do?[/bold]")
         display.console.print(
-            "  1. Train Model(s)\n  2. Make Prediction\n  3. Log Actual Values\n"
-            "  4. Sync API Data\n  5. Exit"
+            "  1. Sync Data (Tiingo)\n  2. Train Model(s)\n"
+            "  3. Make Prediction\n  4. Log Actual Values\n  5. Exit"
         )
         choice = Prompt.ask(
-            "\n[cyan]Select[/cyan]", choices=["1", "2", "3", "4", "5"], default="2"
+            "\n[cyan]Select[/cyan]", choices=["1", "2", "3", "4", "5"], default="3"
         )
         if choice == "5":
-            display.console.print("\n[bold green]Bye![/bold green]")
+            display.console.print("\n[bold green]Ciao![/bold green]")
             break
         try:
             screens[choice]()
@@ -426,25 +364,25 @@ def interactive_mode() -> None:
         except Exception as e:
             display.console.print(f"\n[bold red]Error:[/bold red] {e}")
         if not Confirm.ask("\n[cyan]Perform another operation?[/cyan]", default=True):
-            display.console.print("\n[bold green]Bye![/bold green]")
+            display.console.print("\n[bold green]Ciao![/bold green]")
             break
 
 
 def main() -> None:
-    """Parse command-line arguments and route to appropriate mode.
-
-    Supports both interactive mode (default) and CLI modes for training,
-    predicting, logging, and syncing data.
-    """
     parser = argparse.ArgumentParser(description="FX Trading ML Pipeline")
     parser.add_argument(
         "--mode",
-        choices=["train", "predict", "log", "sync", "interactive"],
+        choices=["sync", "train", "predict", "log", "interactive"],
         default="interactive",
     )
     parser.add_argument("--pair", type=str, default=None)
-    parser.add_argument("--all", action="store_true", help="Train all pairs")
-    parser.add_argument("--open", type=float, default=None)
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument(
+        "--open",
+        type=float,
+        default=None,
+        help="Open price (predict mode, optional if TIINGO_KEY set)",
+    )
     parser.add_argument("--date", type=str, default=None, help="YYYY-MM-DD")
     parser.add_argument("--high", type=float, default=None)
     parser.add_argument("--low", type=float, default=None)
@@ -458,7 +396,19 @@ def main() -> None:
 
     display.banner()
 
-    if args.mode == "train":
+    if args.mode == "sync":
+        if not cfg.TIINGO_KEY:
+            display.console.print("[bold red]TIINGO_KEY not set in .env[/bold red]")
+            return
+        if args.all:
+            pairs = cfg.TRADING_PAIRS
+        elif args.pair:
+            pairs = [args.pair.upper()]
+        else:
+            pairs = cfg.TRADING_PAIRS
+        run_sync(pairs)
+
+    elif args.mode == "train":
         pairs = available_pairs()
         if not pairs:
             display.console.print(
@@ -484,20 +434,10 @@ def main() -> None:
         if not args.pair:
             display.console.print("[bold red]--pair is required[/bold red]")
             return
-        prediction_date = date.fromisoformat(args.date) if args.date else date.today()
+        pred_date = date.fromisoformat(args.date) if args.date else date.today()
         try:
-            open_price = args.open
-            if open_price is None:
-                open_price = MarketDataPipeline(
-                    pair=args.pair.upper()
-                ).fetch_prediction_open(prediction_date=prediction_date)
-                display.console.print(
-                    f"[bold green]✓ API open/spot fetched:[/bold green] "
-                    f"{open_price:.4f}"
-                )
-            result = PredictionPipeline(pair=args.pair.upper()).run(
-                open_price=open_price, prediction_date=prediction_date
-            )
+            pipeline = PredictionPipeline(pair=args.pair.upper())
+            result = pipeline.run(open_price=args.open, prediction_date=pred_date)
             display.prediction_result(result)
         except Exception as e:
             display.console.print(f"[bold red]Error:[/bold red] {e}")
@@ -507,13 +447,9 @@ def main() -> None:
         if not args.pair or not args.date:
             display.console.print("[bold red]--pair and --date are required[/bold red]")
             return
-        if None in (args.high, args.low, args.close):
-            display.console.print(
-                "[bold red]--high, --low, and --close are required[/bold red]"
-            )
-            return
         try:
-            result = LoggingPipeline(pair=args.pair.upper()).run(
+            pipeline = LoggingPipeline(pair=args.pair.upper())
+            result = pipeline.run(
                 prediction_date=date.fromisoformat(args.date),
                 high=args.high,
                 low=args.low,
@@ -521,21 +457,6 @@ def main() -> None:
                 volume=args.volume,
             )
             display.logging_result(result)
-        except ValueError as e:
-            display.console.print(f"[bold red]Error:[/bold red] {e}")
-        except Exception as e:
-            display.console.print(f"[bold red]Error:[/bold red] {e}")
-            traceback.print_exc()
-
-    elif args.mode == "sync":
-        if not args.pair:
-            display.console.print("[bold red]--pair is required[/bold red]")
-            return
-        try:
-            path = MarketDataPipeline(pair=args.pair.upper()).sync_raw_data()
-            display.console.print(
-                f"[bold green]✓ Synced[/bold green] {args.pair.upper()} → {path}"
-            )
         except Exception as e:
             display.console.print(f"[bold red]Error:[/bold red] {e}")
             traceback.print_exc()
