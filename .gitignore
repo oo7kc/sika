@@ -18,6 +18,7 @@ data/*
 
 models/*
 !models/.gitkeep
+!models/raw/.gitkeep
 
 reports/*
 !reports/.gitkeep
