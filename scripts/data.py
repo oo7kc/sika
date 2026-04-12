@@ -17,6 +17,9 @@ def load_data(file_path: str, exclude_weekends: bool = True) -> pd.DataFrame:
         df = pd.read_csv(file_path, index_col=0)
         df.index = pd.to_datetime(df.index, dayfirst=True, format="mixed")
 
+    if df.index.tz is not None:  # type: ignore
+        df.index = df.index.tz_convert("UTC").tz_localize(None)  # type: ignore
+
     if exclude_weekends:
         df = df[~df.index.day_of_week.isin([5, 6])]  # type: ignore
 

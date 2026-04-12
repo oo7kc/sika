@@ -49,6 +49,7 @@ class Config:
             "model": os.path.join(cls.MODEL_DIR, f"{pair}_mlp_classifier.pkl"),
             "scaler": os.path.join(cls.MODEL_DIR, f"{pair}_scaler.pkl"),
             "metadata": os.path.join(cls.MODEL_DIR, f"{pair}_metadata.json"),
+            "log": os.path.join(cls.LOGS_DIR, f"{pair}_predictions.csv"),
         }
 
     @classmethod
