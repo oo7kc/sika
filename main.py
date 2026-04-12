@@ -1,16 +1,18 @@
-"""CLI entry point — routing only.
+"""CLI entry point and interactive menu for the FX Trading ML Pipeline.
 
 Modes:
     interactive  — prompted menu (default)
     train        — train one or all pairs
     predict      — make a prediction for a pair
     log          — record actual values and update accuracy
+    sync         — synchronize raw data from Tiingo API
 
 Examples:
     python main.py
     python main.py --mode train --all
     python main.py --mode predict --pair XAUUSD --open 2650.50
-    python main.py --mode log --pair XAUUSD --date 2024-11-22 --high 2651 --low 2645 --close 2648
+    python main.py --mode log --pair XAUUSD --date 2024-11-22 --high 2651 --low 2645
+    --close 2648
 """
 
 import argparse
@@ -32,14 +34,21 @@ from scripts.train import TrainingPipeline
 cfg = Config()
 
 
-# / Pair discovery helpers /
-
-
 def available_pairs() -> list[str]:
+    """Get list of trading pairs with available raw data files.
+
+    Returns:
+        List of pair symbols that have data in RAW_DATA_DIR.
+    """
     return [p for p in cfg.TRADING_PAIRS if Path(cfg.get_paths(p)["raw_data"]).exists()]
 
 
 def trained_pairs() -> list[str]:
+    """Get list of trading pairs with trained models.
+
+    Returns:
+        List of pair symbols that have both model and scaler files.
+    """
     return [
         p
         for p in cfg.TRADING_PAIRS
@@ -49,13 +58,27 @@ def trained_pairs() -> list[str]:
 
 
 def pairs_with_logs() -> list[str]:
+    """Get list of trading pairs with prediction logs.
+
+    Returns:
+        List of pair symbols that have a prediction log CSV.
+    """
     return [p for p in cfg.TRADING_PAIRS if Path(cfg.get_paths(p)["log"]).exists()]
 
 
-# / Prompt helpers /
-
-
 def pick_pair(options: list[str], prompt: str) -> str:
+    """Interactive prompt to select a trading pair.
+
+    Displays numbered list of options and allows user to either select one
+    or enter a custom pair.
+
+    Args:
+        options: List of pair symbols to display as choices.
+        prompt: Prompt text to display to user.
+
+    Returns:
+        Selected or entered trading pair symbol (uppercase).
+    """
     for i, p in enumerate(options, 1):
         display.console.print(f"  {i}. {p}")
     display.console.print(f"  {len(options) + 1}. Custom pair")
@@ -71,6 +94,18 @@ def pick_pair(options: list[str], prompt: str) -> str:
 
 
 def ask_price(label: str, min_val: float = 0.0, max_val: float = float("inf")) -> float:
+    """Interactive prompt for price input with validation.
+
+    Loops until user enters a valid price within the specified range.
+
+    Args:
+        label: Prompt label to display.
+        min_val: Minimum allowed price (exclusive).
+        max_val: Maximum allowed price (inclusive).
+
+    Returns:
+        Valid price as a float.
+    """
     while True:
         try:
             v = float(Prompt.ask(f"[cyan]{label}[/cyan]"))
@@ -82,6 +117,16 @@ def ask_price(label: str, min_val: float = 0.0, max_val: float = float("inf")) -
 
 
 def ask_date(prompt: str) -> date:
+    """Interactive prompt for date input in ISO format.
+
+    Loops until user enters a valid YYYY-MM-DD date.
+
+    Args:
+        prompt: Prompt text to display.
+
+    Returns:
+        Parsed date object.
+    """
     while True:
         try:
             return date.fromisoformat(Prompt.ask(f"[cyan]{prompt}[/cyan]"))
@@ -89,7 +134,14 @@ def ask_date(prompt: str) -> date:
             display.console.print("[bold red]Use YYYY-MM-DD format[/bold red]")
 
 
-def run_training(pairs: list[str]):
+def run_training(pairs: list[str]) -> None:
+    """Execute training pipeline for multiple pairs.
+
+    Trains models sequentially, reporting success/failure for each pair.
+
+    Args:
+        pairs: List of pair symbols to train.
+    """
     ok, fail = 0, 0
     for i, pair in enumerate(pairs, 1):
         display.console.print(
@@ -113,10 +165,12 @@ def run_training(pairs: list[str]):
     display.console.print(f"{'=' * 50}\n")
 
 
-# / Interactive screens /
+def train_screen() -> None:
+    """Interactive training mode screen.
 
-
-def train_screen():
+    Displays available data, lets user select pairs to train,
+    then runs training pipeline.
+    """
     display.console.print("\n[bold cyan]═══ TRAINING MODE ═══[/bold cyan]\n")
     pairs = available_pairs()
     if not pairs:
@@ -144,7 +198,12 @@ def train_screen():
         display.console.print("[yellow]Cancelled.[/yellow]")
 
 
-def predict_screen():
+def predict_screen() -> None:
+    """Interactive prediction mode screen.
+
+    Displays trained models, lets user select pair and price,
+    then runs prediction and displays result.
+    """
     display.console.print("\n[bold cyan]═══ PREDICTION MODE ═══[/bold cyan]\n")
     pairs = trained_pairs()
     if not pairs:
@@ -197,7 +256,12 @@ def predict_screen():
             display.console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
 
-def log_screen():
+def log_screen() -> None:
+    """Interactive logging mode screen.
+
+    Displays pending predictions, lets user select date to log,
+    fetches or manually enters actual OHLCV, logs result, and updates accuracy.
+    """
     display.console.print("\n[bold cyan]═══ LOGGING MODE ═══[/bold cyan]\n")
     pairs = pairs_with_logs()
     if not pairs:
@@ -252,7 +316,6 @@ def log_screen():
         )
         return
 
-    # Try to fetch actual data from Tiingo API first
     display.console.print(
         "\n[bold cyan]Attempting to fetch actual data from Tiingo API...[/bold cyan]"
     )
@@ -281,7 +344,6 @@ def log_screen():
             close = None
             volume = None
 
-    # If no API data or user rejected it, ask for manual entry
     if high is None:
         display.console.print("[bold yellow]Entering manual data[/bold yellow]")
         high = ask_price("High price")
@@ -313,7 +375,11 @@ def log_screen():
             display.console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
 
-def sync_screen():
+def sync_screen() -> None:
+    """Interactive API sync mode screen.
+
+    Lets user select a pair and syncs raw data from Tiingo API.
+    """
     display.console.print("\n[bold cyan]═══ API SYNC MODE ═══[/bold cyan]\n")
     display.console.print("[bold]Available pairs:[/bold]")
     pair = pick_pair(cfg.TRADING_PAIRS, "Select a pair to sync")
@@ -328,7 +394,12 @@ def sync_screen():
         display.console.print(f"[bold red]Error:[/bold red] {e}")
 
 
-def interactive_mode():
+def interactive_mode() -> None:
+    """Run the interactive menu loop.
+
+    Displays banner and menu, lets user select operation (train, predict,
+    log, sync), and loops until user chooses to exit.
+    """
     display.banner()
     screens = {
         "1": train_screen,
@@ -339,7 +410,8 @@ def interactive_mode():
     while True:
         display.console.print("\n[bold]What would you like to do?[/bold]")
         display.console.print(
-            "  1. Train Model(s)\n  2. Make Prediction\n  3. Log Actual Values\n  4. Sync API Data\n  5. Exit"
+            "  1. Train Model(s)\n  2. Make Prediction\n  3. Log Actual Values\n"
+            "  4. Sync API Data\n  5. Exit"
         )
         choice = Prompt.ask(
             "\n[cyan]Select[/cyan]", choices=["1", "2", "3", "4", "5"], default="2"
@@ -358,10 +430,12 @@ def interactive_mode():
             break
 
 
-# CLI entry point
+def main() -> None:
+    """Parse command-line arguments and route to appropriate mode.
 
-
-def main():
+    Supports both interactive mode (default) and CLI modes for training,
+    predicting, logging, and syncing data.
+    """
     parser = argparse.ArgumentParser(description="FX Trading ML Pipeline")
     parser.add_argument(
         "--mode",
@@ -418,7 +492,8 @@ def main():
                     pair=args.pair.upper()
                 ).fetch_prediction_open(prediction_date=prediction_date)
                 display.console.print(
-                    f"[bold green]✓ API open/spot fetched:[/bold green] {open_price:.4f}"
+                    f"[bold green]✓ API open/spot fetched:[/bold green] "
+                    f"{open_price:.4f}"
                 )
             result = PredictionPipeline(pair=args.pair.upper()).run(
                 open_price=open_price, prediction_date=prediction_date

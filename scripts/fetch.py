@@ -1,12 +1,10 @@
-"""Tiingo market-data fetch and local raw-data sync."""
+"""Tiingo market data API client for historical and real-time prices."""
 
-import json
 from datetime import date
 from pathlib import Path
-from urllib.parse import urlencode
-from urllib.request import urlopen
 
 import pandas as pd
+import requests
 
 from config import Config
 from scripts.logger import get_logger
@@ -15,11 +13,23 @@ logger = get_logger(__name__)
 
 
 class MarketDataPipeline:
-    FOREX_BASE_URL = "https://api.tiingo.com/tiingo/fx/historical"
-    CRYPTO_BASE_URL = "https://api.tiingo.com/tiingo/crypto/prices"
-    FOREX_PRICES_URL = "https://api.tiingo.com/tiingo/fx/prices"
+    """Fetch market data from Tiingo API and sync with local storage.
 
-    def __init__(self, pair: str):
+    Supports cryptocurrency (BTCUSD) pairs with historical data fetching,
+    current price queries, and local file syncing.
+    """
+
+    CRYPTO_PRICES_URL = "https://api.tiingo.com/tiingo/crypto/prices"
+
+    def __init__(self, pair: str) -> None:
+        """Initialize the market data pipeline for a trading pair.
+
+        Args:
+            pair: Trading pair symbol (e.g., "BTCUSD", "XAUUSD").
+
+        Raises:
+            ValueError: If TIINGO_KEY is not set in configuration.
+        """
         self.config = Config()
         self.pair = pair.upper()
         self.paths = self.config.get_paths(self.pair)
@@ -27,115 +37,100 @@ class MarketDataPipeline:
         if not self.api_key:
             raise ValueError("Missing TIINGO_KEY in environment.")
 
-    def _is_forex(self) -> bool:
-        """Determine if pair is forex."""
-        return self.pair in ["XAUUSD"]
-
     def _is_crypto(self) -> bool:
-        """Determine if pair is cryptocurrency."""
+        """Check if the pair is a cryptocurrency pair."""
         return self.pair in ["BTCUSD"]
 
-    def _query(self, url: str, **params) -> dict:
-        """Make HTTP request to Tiingo API."""
-        full_url = f"{url}?{urlencode({**params, 'token': self.api_key})}"
-        logger.info(f"Fetching Tiingo data for {self.pair}")
+    def _query(self, url: str, **params) -> dict | list:
+        """Execute HTTP GET request to Tiingo API.
+
+        Args:
+            url: Tiingo API endpoint URL.
+            **params: Query parameters.
+
+        Returns:
+            Parsed JSON response.
+
+        Raises:
+            RuntimeError: If request fails.
+        """
+        params["token"] = self.api_key
+        logger.info(f"Fetching from Tiingo: {url}")
+
         try:
-            with urlopen(full_url) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception as e:
-            logger.error(f"Failed to fetch from Tiingo: {e}")
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP {e.response.status_code}: {e.response.text}")
+            raise RuntimeError(f"Tiingo HTTP error: {e.response.status_code}") from e
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed: {e}")
             raise RuntimeError(f"Failed to fetch from Tiingo: {e}") from e
 
-        # Check for Tiingo errors
-        if isinstance(payload, dict):
-            if "error" in payload:
-                raise RuntimeError(f"Tiingo API error: {payload['error']}")
-            if "message" in payload:
-                raise RuntimeError(f"Tiingo API message: {payload['message']}")
-
-        return payload
-
     def fetch_history(self) -> pd.DataFrame:
-        """Fetch historical OHLCV data from Tiingo."""
-        if self._is_forex():
-            return self._fetch_forex_history()
-        elif self._is_crypto():
+        """Fetch historical OHLCV data from Tiingo.
+
+        Returns:
+            DataFrame with DateTime index and OHLCV columns.
+
+        Raises:
+            ValueError: If pair is not supported.
+            RuntimeError: If API response is malformed.
+        """
+        if self._is_crypto():
             return self._fetch_crypto_history()
         else:
             raise ValueError(f"Unsupported pair: {self.pair}")
 
-    def _fetch_forex_history(self) -> pd.DataFrame:
-        """Fetch forex (XAUUSD) historical data."""
-        ticker = self.pair.lower()
-        payload = self._query(
-            self.FOREX_BASE_URL,
-            tickers=ticker,
-            startDate=self.config.START_DATE,
-            resampleFreq="daily",
-        )
-
-        # Handle single ticker response
-        if isinstance(payload, dict) and "priceData" in payload:
-            price_data = payload["priceData"]
-        elif isinstance(payload, list) and len(payload) > 0:
-            price_data = payload[0].get("priceData", [])
-        else:
-            raise RuntimeError(f"Unexpected Tiingo response format: {payload}")
-
-        rows = []
-        for item in price_data:
-            rows.append(
-                {
-                    "Date": item["date"],
-                    "Open": float(item.get("open", item.get("close", 0))),
-                    "High": float(item["high"]),
-                    "Low": float(item["low"]),
-                    "Close": float(item["close"]),
-                    "Volume": float(item.get("volume", 0)),
-                }
-            )
-
-        if not rows:
-            raise RuntimeError(f"No price data returned for {self.pair}")
-
-        df = pd.DataFrame(rows)
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df.set_index("Date").sort_index()
-        logger.info(f"Fetched {len(df)} rows for {self.pair}")
-        return df
-
     def _fetch_crypto_history(self) -> pd.DataFrame:
-        """Fetch crypto (BTCUSD) historical data."""
+        """Fetch cryptocurrency historical data.
+
+        Returns:
+            DataFrame with DateTime index and OHLCV columns.
+        """
         ticker = self.pair.lower()
+
         payload = self._query(
-            self.CRYPTO_BASE_URL,
+            self.CRYPTO_PRICES_URL,
             tickers=ticker,
-            resampleFreq="daily",
             startDate=self.config.START_DATE,
+            resampleFreq="1Day",
         )
 
-        # Crypto endpoint returns array of tickers
+        price_data = []
+
         if isinstance(payload, list) and len(payload) > 0:
             ticker_data = payload[0]
-            price_data = ticker_data.get("priceData", [])
-        else:
-            raise RuntimeError(f"Unexpected Tiingo crypto response: {payload}")
+            if isinstance(ticker_data, dict):
+                price_data = ticker_data.get("priceData", [])
+        elif isinstance(payload, dict):
+            if "priceData" in payload:
+                price_data = payload["priceData"]
+
+        if not price_data:
+            logger.warning(f"No price data returned for {self.pair}")
+            raise RuntimeError(f"No price data available for {self.pair}")
 
         rows = []
         for item in price_data:
-            rows.append(
-                {
-                    "Date": item["date"],
-                    "Open": float(item.get("open", item.get("close", 0))),
-                    "High": float(item["high"]),
-                    "Low": float(item["low"]),
-                    "Close": float(item["close"]),
-                    "Volume": float(item.get("volume", 0)),
-                }
-            )
+            try:
+                rows.append(
+                    {
+                        "Date": item.get("date"),
+                        "Open": float(item.get("open", item.get("close", 0))),
+                        "High": float(item.get("high", 0)),
+                        "Low": float(item.get("low", 0)),
+                        "Close": float(item.get("close", 0)),
+                        "Volume": float(item.get("volume", 0)),
+                    }
+                )
+            except (KeyError, ValueError, TypeError) as e:
+                logger.warning(f"Skipping malformed row: {e}")
+                continue
 
         if not rows:
-            raise RuntimeError(f"No price data returned for {self.pair}")
+            raise RuntimeError(f"No valid data parsed for {self.pair}")
 
         df = pd.DataFrame(rows)
         df["Date"] = pd.to_datetime(df["Date"])
@@ -146,8 +141,17 @@ class MarketDataPipeline:
     def fetch_prediction_open(self, prediction_date: date) -> float:
         """Fetch opening price for prediction date.
 
-        For today: fetch current spot price
-        For past dates: fetch from historical data
+        For today: fetches current price.
+        For past dates: fetches from historical data.
+
+        Args:
+            prediction_date: Date to fetch price for.
+
+        Returns:
+            Opening price as float.
+
+        Raises:
+            RuntimeError: If price cannot be fetched.
         """
         try:
             if prediction_date == date.today():
@@ -159,8 +163,7 @@ class MarketDataPipeline:
                     return float(history.loc[ts, "Open"])
                 else:
                     logger.warning(
-                        f"Date {prediction_date} not found in history, "
-                        f"using most recent"
+                        f"Date {prediction_date} not found, using most recent price"
                     )
                     return float(history.iloc[-1]["Open"])
         except Exception as e:
@@ -168,53 +171,39 @@ class MarketDataPipeline:
             raise
 
     def _fetch_current_price(self) -> float:
-        """Fetch current spot price from Tiingo."""
-        if self._is_forex():
-            return self._fetch_forex_current()
-        elif self._is_crypto():
-            return self._fetch_crypto_current()
-        else:
-            raise ValueError(f"Unsupported pair: {self.pair}")
+        """Fetch current spot price from Tiingo.
 
-    def _fetch_forex_current(self) -> float:
-        """Fetch current forex (spot) price."""
-        ticker = self.pair.lower()
-        payload = self._query(
-            self.FOREX_PRICES_URL,
-            tickers=ticker,
-        )
+        Returns:
+            Current price as float.
 
-        # Response is typically a list with ticker data
-        if isinstance(payload, list) and len(payload) > 0:
-            last_price = payload[0].get("last")
-            if last_price is not None:
-                return float(last_price)
-            close = payload[0].get("close")
-            if close is not None:
-                return float(close)
+        Raises:
+            RuntimeError: If price cannot be fetched.
+        """
+        if self._is_crypto():
+            ticker = self.pair.lower()
+            payload = self._query(
+                self.CRYPTO_PRICES_URL,
+                tickers=ticker,
+                resampleFreq="1Min",
+            )
 
-        raise RuntimeError(f"Could not extract price from Tiingo response: {payload}")
+            if isinstance(payload, list) and len(payload) > 0:
+                price_data = payload[0].get("priceData", [])
+                if price_data:
+                    latest = price_data[-1]
+                    return float(latest.get("close", latest.get("open", 0)))
 
-    def _fetch_crypto_current(self) -> float:
-        """Fetch current crypto price."""
-        ticker = self.pair.lower()
-        payload = self._query(
-            self.CRYPTO_BASE_URL,
-            tickers=ticker,
-            resampleFreq="1min",
-        )
-
-        # Response is array with ticker data
-        if isinstance(payload, list) and len(payload) > 0:
-            price_data = payload[0].get("priceData", [])
-            if price_data:
-                latest = price_data[-1]
-                return float(latest.get("close", latest.get("open", 0)))
-
-        raise RuntimeError(f"Could not extract price from Tiingo response: {payload}")
+        raise RuntimeError(f"Could not fetch current price for {self.pair}")
 
     def sync_raw_data(self) -> Path:
-        """Fetch historical data and sync with existing raw data file."""
+        """Fetch historical data and sync with existing raw data file.
+
+        Returns:
+            Path to the synced raw data file.
+
+        Raises:
+            RuntimeError: If file cannot be written.
+        """
         history = self.fetch_history()
         history.index = pd.to_datetime(history.index)
         history.index.name = "Date"
@@ -235,15 +224,19 @@ class MarketDataPipeline:
         else:
             data = history
 
-        data.to_csv(path)
-        logger.info(f"Synced raw data → {path}")
-        return path
+        try:
+            data.to_csv(path)
+            logger.info(f"Synced raw data → {path}")
+            return path
+        except Exception as e:
+            logger.error(f"Failed to write raw data: {e}")
+            raise RuntimeError(f"Could not write raw data: {e}") from e
 
     def fetch_actual_data(self, prediction_date: date) -> dict | None:
         """Fetch actual OHLCV data for a completed trading day.
 
-        This is used to auto-populate actual values from API instead of manual entry.
-        Returns dict with open, high, low, close, volume if available, else None.
+        Returns:
+            Dict with open, high, low, close, volume if available, else None.
         """
         try:
             history = self.fetch_history()

@@ -1,4 +1,4 @@
-"""Logging pipeline — records actual OHLCV values and tracks prediction accuracy."""
+"""Logging pipeline for recording actual OHLCV values and tracking accuracy."""
 
 from datetime import date
 from pathlib import Path
@@ -15,33 +15,75 @@ logger = get_logger(__name__)
 
 
 class LoggingPipeline:
-    def __init__(self, pair: str):
+    """Log actual market data and track prediction accuracy metrics.
+
+    Maintains a CSV log of predictions with actual values and correctness flags.
+    Calculates overall and per-signal-type accuracy statistics. Can optionally
+    fetch actual data from Tiingo API.
+    """
+
+    def __init__(self, pair: str) -> None:
+        """Initialize the logging pipeline for a trading pair.
+
+        Args:
+            pair: Trading pair symbol (e.g., "XAUUSD").
+        """
         self.config = Config()
         self.pair = pair.upper()
         self.paths = self.config.get_paths(self.pair)
         self.log_path = Path(self.paths["log"])
 
-    # / Log helpers /
-
     def load_prediction_log(self) -> pd.DataFrame:
+        """Load the prediction log CSV file.
+
+        Returns:
+            DataFrame with columns Date, Open, Predicted, Actual, Correct.
+
+        Raises:
+            FileNotFoundError: If no prediction log exists for this pair.
+        """
         if not self.log_path.exists():
             raise FileNotFoundError(
                 f"No prediction log at {self.log_path}. Make predictions first."
             )
         log = pd.read_csv(self.log_path, index_col=0, parse_dates=[0])
-        log.index = pd.Index(pd.to_datetime(log.index).date)
+        log.index = pd.Index(pd.to_datetime(log.index).dt.date)  # type: ignore
         log.index.name = "Date"
         logger.info(f"Loaded log — {len(log)} entries")
         return log
 
     def get_pending_predictions(self, log: pd.DataFrame) -> pd.DataFrame:
+        """Get predictions that have not yet been logged with actual values.
+
+        Args:
+            log: Prediction log DataFrame.
+
+        Returns:
+            Subset of log where Actual column is NaN.
+        """
         pending = log[log["Actual"].isna()]
         logger.info(f"{len(pending)} prediction(s) pending")
-        return pending
+        return pending  # type: ignore
 
     def update_log(
-        self, log: pd.DataFrame, prediction_date: date, actual: int
+        self,
+        log: pd.DataFrame,
+        prediction_date: date,
+        actual: int,
     ) -> pd.DataFrame:
+        """Update log with actual values and correctness for a prediction.
+
+        Args:
+            log: Prediction log DataFrame.
+            prediction_date: Date of the prediction to update.
+            actual: Actual signal value (-1, 0, or 1).
+
+        Returns:
+            Updated log DataFrame.
+
+        Raises:
+            ValueError: If no prediction exists for the given date.
+        """
         if prediction_date not in log.index:
             raise ValueError(f"No prediction found for {prediction_date}")
         log.loc[prediction_date, "Actual"] = actual
@@ -52,8 +94,28 @@ class LoggingPipeline:
 
     @staticmethod
     def validate_ohlc(
-        open_price: float, high: float, low: float, close: float, volume: float
-    ):
+        open_price: float,
+        high: float,
+        low: float,
+        close: float,
+        volume: float,
+    ) -> None:
+        """Validate OHLCV data integrity.
+
+        Ensures that:
+        - Low <= Open/Close <= High
+        - Volume >= 0
+
+        Args:
+            open_price: Opening price.
+            high: High price.
+            low: Low price.
+            close: Closing price.
+            volume: Trading volume.
+
+        Raises:
+            ValueError: If any OHLCV constraint is violated.
+        """
         if low > high:
             raise ValueError("Low price cannot be greater than high price.")
         if not low <= open_price <= high:
@@ -63,14 +125,27 @@ class LoggingPipeline:
         if volume < 0:
             raise ValueError("Volume cannot be negative.")
 
-    def save_prediction_log(self, log: pd.DataFrame):
+    def save_prediction_log(self, log: pd.DataFrame) -> None:
+        """Save the prediction log to CSV file.
+
+        Args:
+            log: Prediction log DataFrame.
+        """
         log.to_csv(self.log_path)
         logger.info(f"Log saved → {self.log_path}")
 
-    def try_fetch_actuals(self, prediction_date: date) -> dict | None:
+    def try_fetch_actuals(self, prediction_date: date) -> dict[str, float] | None:
         """Attempt to fetch actual OHLCV data from Tiingo API.
 
-        Returns dict with {open, high, low, close, volume} if available, else None.
+        If successful, returns a dict that can be used to populate actual values
+        instead of requiring manual entry.
+
+        Args:
+            prediction_date: Date to fetch actual data for.
+
+        Returns:
+            Dictionary with {open, high, low, close, volume} if available,
+            None if fetch fails or data not available.
         """
         try:
             pipeline = MarketDataPipeline(pair=self.pair)
@@ -84,8 +159,6 @@ class LoggingPipeline:
             logger.warning(f"Could not fetch actuals from API: {e}")
         return None
 
-    # / Raw data update — raises on failure so callers know it didn't persist /
-
     def update_raw_data(
         self,
         prediction_date: date,
@@ -94,11 +167,22 @@ class LoggingPipeline:
         low: float,
         close: float,
         volume: float,
-    ):
-        """Write the completed OHLCV bar back into the raw CSV.
+    ) -> None:
+        """Write completed OHLCV bar into the raw data CSV file.
+
+        Updates an existing row if the date exists, or appends a new row.
+        Raises on any error so that the caller knows the update did not persist.
+
+        Args:
+            prediction_date: Date of the bar to write.
+            open_price: Opening price.
+            high: High price.
+            low: Low price.
+            close: Closing price.
+            volume: Trading volume.
 
         Raises:
-            RuntimeError: if the file cannot be read or written.
+            RuntimeError: If raw data cannot be read or written.
         """
         try:
             data = load_data(
@@ -121,7 +205,7 @@ class LoggingPipeline:
                 data.loc[ts, col] = val
             logger.info(f"Updated existing raw-data entry for {prediction_date}")
         else:
-            data = pd.concat([data, pd.DataFrame(row, index=[ts])]).sort_index()
+            data = pd.concat([data, pd.DataFrame(row, index=[ts])]).sort_index()  # type: ignore
             logger.info(f"Appended new raw-data entry for {prediction_date}")
 
         try:
@@ -130,9 +214,24 @@ class LoggingPipeline:
         except Exception as e:
             raise RuntimeError(f"Could not write raw data: {e}") from e
 
-    # / Accuracy metrics /
+    def calculate_accuracy_metrics(self, log: pd.DataFrame) -> dict[str, float]:
+        """Calculate overall accuracy metrics from the prediction log.
 
-    def calculate_accuracy_metrics(self, log: pd.DataFrame) -> dict:
+        Includes overall accuracy and rolling accuracies (last 10 and 30 predictions).
+
+        Args:
+            log: Prediction log DataFrame.
+
+        Returns:
+            Dictionary with keys:
+                - total_predictions: Total predictions ever made
+                - completed_predictions: Predictions with actual values logged
+                - correct_count: Number of correct predictions
+                - incorrect_count: Number of incorrect predictions
+                - overall_accuracy: Accuracy percentage
+                - rolling_accuracy_10: Last 10 predictions accuracy
+                - rolling_accuracy_30: Last 30 predictions accuracy
+        """
         completed = log[log["Correct"].notna()]
         n = len(completed)
         if n == 0:
@@ -161,7 +260,21 @@ class LoggingPipeline:
             else overall,
         }
 
-    def get_accuracy_by_prediction_type(self, log: pd.DataFrame) -> dict:
+    def get_accuracy_by_prediction_type(
+        self,
+        log: pd.DataFrame,
+    ) -> dict[int, dict[str, float]]:
+        """Calculate accuracy metrics broken down by prediction signal type.
+
+        Args:
+            log: Prediction log DataFrame.
+
+        Returns:
+            Dictionary mapping signal (-1, 0, 1) to accuracy stats:
+                - count: Number of that signal type
+                - correct: Number correct for that signal
+                - accuracy: Accuracy percentage for that signal
+        """
         completed = log[log["Correct"].notna()]
         return {
             sig: {
@@ -173,8 +286,6 @@ class LoggingPipeline:
             if len(s := completed[completed["Predicted"] == sig]) > 0
         }
 
-    # / Entry point /
-
     def run(
         self,
         prediction_date: date,
@@ -183,6 +294,34 @@ class LoggingPipeline:
         close: float | None = None,
         volume: float | None = None,
     ) -> dict:
+        """Log actual values for a prediction and update accuracy metrics.
+
+        Loads the prediction log, validates OHLCV data, updates the log with
+        actual values and correctness, updates raw data, and calculates metrics.
+
+        Can auto-fetch actual data from Tiingo API if values not provided.
+
+        Args:
+            prediction_date: Date of the prediction to log.
+            high: High price. If None, attempts to fetch from API.
+            low: Low price. If None, attempts to fetch from API.
+            close: Close price. If None, attempts to fetch from API.
+            volume: Volume. If None, attempts to fetch from API.
+
+        Returns:
+            Dictionary with:
+                - pair, date, open_price, high, low, close, volume: Market data
+                - data_source: "manual" or "api"
+                - predicted, actual: Signal values (-1, 0, 1)
+                - correct: Boolean indicating if prediction was correct
+                - metrics: Overall accuracy metrics
+                - accuracy_by_type: Per-signal-type accuracy breakdown
+
+        Raises:
+            FileNotFoundError: If no prediction log exists.
+            ValueError: If no prediction found for date or OHLCV validation fails.
+            RuntimeError: If raw data cannot be updated.
+        """
         logger.info(f"=== Logging start: {self.pair} | {prediction_date} ===")
 
         log = self.load_prediction_log()
@@ -197,7 +336,6 @@ class LoggingPipeline:
 
         open_price = float(log.loc[prediction_date, "Open"])
 
-        # Try to fetch actual data from API if not provided manually
         data_source = "manual"
         if high is None or low is None or close is None or volume is None:
             api_data = self.try_fetch_actuals(prediction_date)
@@ -214,7 +352,6 @@ class LoggingPipeline:
                     "Please provide manual OHLCV values."
                 )
 
-        # Validate OHLC values
         if high is None or low is None or close is None or volume is None:
             raise ValueError("OHLCV values cannot be None")
         high = float(high)

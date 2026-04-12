@@ -1,3 +1,5 @@
+"""Logging configuration with dual console and file output."""
+
 import logging
 import logging.handlers
 from pathlib import Path
@@ -6,15 +8,30 @@ from config import Config
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a named logger with both console and file handlers.
+    """Create or retrieve a named logger with console and file handlers.
 
-    Features:
-    - Logs to console for real-time feedback
-    - Logs to file in logs/sika.log with rotation (10 files, 5MB each)
-    - Consistent format across both handlers
+    Returns a logger configured with both console and file output. Console
+    messages go to stdout in real-time for interactive feedback. File output
+    uses rotating handlers to manage disk space (5MB per file, up to 10 backups).
 
-    Call once per module:
-        logger = get_logger(__name__)
+    Multiple calls with the same name return the same logger instance, so it's
+    safe to call this multiple times. Handlers are only attached on first call.
+
+    Args:
+        name: Logger name, typically __name__ for module-level loggers.
+
+    Returns:
+        Configured Logger instance with handlers ready to use.
+
+    Example:
+        >>> logger = get_logger(__name__)
+        >>> logger.info("Training started")
+        >>> logger.warning("Low memory available")
+
+    Note:
+        Log files are stored in logs/sika.log with automatic rotation.
+        Each file grows to 5MB before the next backup is created.
+        Up to 10 backup files are retained.
     """
     logger = logging.getLogger(name)
     if not logger.handlers:

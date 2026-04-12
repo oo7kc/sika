@@ -1,7 +1,6 @@
-"""Training pipeline — fits the MLP classifier and saves all artifacts."""
+"""Training pipeline for fitting ML models on historical data."""
 
 import json
-from typing import Optional
 
 import joblib
 import numpy as np
@@ -19,15 +18,36 @@ logger = get_logger(__name__)
 
 
 class TrainingPipeline:
-    def __init__(self, pair: Optional[str] = None):
+    """Pipeline for training and saving ML models on trading data.
+
+    Loads historical OHLCV data, computes technical indicators, prepares
+    features and targets, trains an MLPClassifier, and saves all artifacts.
+    """
+
+    def __init__(self, pair: str | None = None) -> None:
+        """Initialize the training pipeline for a trading pair.
+
+        Args:
+            pair: Trading pair symbol (e.g., "XAUUSD"). If None, uses the
+                first pair from configuration.
+        """
         self.config = Config()
         self.pair = (pair or self.config.TRADING_PAIRS[0]).upper()
         self.paths = self.config.get_paths(self.pair)
-        self.scaler: Optional[MinMaxScaler] = None
-        self.model: Optional[MLPClassifier] = None
+        self.scaler: MinMaxScaler | None = None
+        self.model: MLPClassifier | None = None
         self.metrics: dict = {}
 
     def load_and_preprocess(self) -> tuple[pd.DataFrame, pd.Series]:
+        """Load raw data, compute indicators, and prepare features.
+
+        Returns:
+            Tuple of (X, y) where X is features and y is the Gamma target labels.
+
+        Raises:
+            FileNotFoundError: If raw data file doesn't exist.
+            ValueError: If data is insufficient after preprocessing.
+        """
         logger.info(f"Loading data for {self.pair}")
         data = load_data(
             self.paths["raw_data"], exclude_weekends=not is_crypto(self.pair)
@@ -39,11 +59,27 @@ class TrainingPipeline:
             data, self.config.SELECTED_FEATURES, self.config.START_DATE
         )
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> dict:
-        """Scale features, build, and train the model. Returns metadata dict."""
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> dict[str, object]:
+        """Scale features, build, and train the MLPClassifier model.
+
+        Performs a chronological 80/20 train/test split, fits the scaler on
+        training data, and trains the model. Computes accuracy metrics on both
+        splits.
+
+        Args:
+            X: Feature matrix.
+            y: Target labels.
+
+        Returns:
+            Metadata dictionary with model architecture and training metrics.
+
+        Raises:
+            ValueError: If fewer than 10 rows available after preprocessing.
+        """
         if len(X) < 10:
             raise ValueError(
-                f"Not enough rows to train {self.pair}. Need at least 10 after preprocessing."
+                f"Not enough rows to train {self.pair}. "
+                "Need at least 10 after preprocessing."
             )
 
         split_idx = max(int(len(X) * 0.8), 1)
@@ -109,7 +145,15 @@ class TrainingPipeline:
             "metrics": self.metrics,
         }
 
-    def save(self, metadata: dict):
+    def save(self, metadata: dict[str, object]) -> None:
+        """Save trained model, scaler, and metadata to disk.
+
+        Args:
+            metadata: Dictionary with model architecture and training metrics.
+
+        Raises:
+            IOError: If files cannot be written.
+        """
         self.config.create_directories()
         joblib.dump(self.model, self.paths["model"])
         logger.info(f"Model  → {self.paths['model']}")
@@ -119,7 +163,16 @@ class TrainingPipeline:
             json.dump(metadata, f, indent=2)
         logger.info(f"Meta   → {self.paths['metadata']}")
 
-    def run(self):
+    def run(self) -> None:
+        """Execute the complete training pipeline.
+
+        Loads data, preprocesses, trains model, saves all artifacts.
+
+        Raises:
+            FileNotFoundError: If raw data doesn't exist.
+            ValueError: If insufficient data for training.
+            IOError: If artifacts cannot be saved.
+        """
         logger.info(f"=== Training start: {self.pair} ===")
         X, y = self.load_and_preprocess()
         metadata = self.fit(X, y)

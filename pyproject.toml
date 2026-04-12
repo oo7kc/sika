@@ -1,13 +1,15 @@
 [project]
 name = "fx-pred"
 version = "0.1.0"
-description = "Add your description here"
+description = "Machine Learning with Technical Indicators for Financial Market Trend Prediction"
 readme = "README.md"
 requires-python = "==3.12.9"
 dependencies = [
     "dotenv==0.9.9",
+    "joblib==1.5.3",
     "numpy==2.3.4",
     "pandas==2.3.3",
+    "requests>=2.33.1",
     "rich==14.2.0",
     "scikit-learn==1.7.2",
     "ta-lib==0.6.8",

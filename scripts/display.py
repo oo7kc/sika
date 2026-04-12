@@ -1,7 +1,6 @@
-"""All terminal display logic.
+"""Terminal display and output formatting using Rich."""
 
-``SIGNAL_LABELS`` is the single source of truth for signal → label mapping.
-"""
+from typing import Any
 
 from rich import box
 from rich.console import Console
@@ -10,8 +9,7 @@ from rich.table import Table
 
 console = Console()
 
-# signal labels — used by predict, log, and display
-SIGNAL_LABELS: dict[int, dict] = {
+SIGNAL_LABELS: dict[int, dict[str, str]] = {
     1: {"action": "Buy / Go Long", "emoji": "📈", "color": "green", "short": "📈 Buy"},
     0: {
         "action": "Hold / No Change",
@@ -28,7 +26,11 @@ SIGNAL_LABELS: dict[int, dict] = {
 }
 
 
-def banner():
+def banner() -> None:
+    """Display the application banner and title.
+
+    Prints a styled ASCII art banner to introduce the FX Trading ML Pipeline.
+    """
     console.print(
         """
     ╔═══════════════════════════════════════════════╗
@@ -40,7 +42,19 @@ def banner():
     )
 
 
-def prediction_result(result: dict):
+def prediction_result(result: dict[str, Any]) -> None:
+    """Display prediction result in a formatted table with interpretation.
+
+    Shows the predicted signal with emoji, recommended action, and explanation
+    of what the prediction means for trading.
+
+    Args:
+        result: Dictionary with keys:
+            - pair: Trading pair symbol
+            - date: Prediction date
+            - open_price: Current opening/spot price
+            - prediction: Signal value (-1, 0, or 1)
+    """
     sig = SIGNAL_LABELS.get(
         result["prediction"], {"action": "Unknown", "emoji": "❓", "color": "white"}
     )
@@ -83,7 +97,22 @@ def prediction_result(result: dict):
     console.print("\n[dim]⚠ Model prediction only — not financial advice.[/dim]")
 
 
-def logging_result(result: dict):
+def logging_result(result: dict[str, Any]) -> None:
+    """Display logging result with OHLCV data, accuracy, and interpretation.
+
+    Shows the recorded market data, comparison of predicted vs actual signal,
+    and updated accuracy metrics.
+
+    Args:
+        result: Dictionary with keys:
+            - pair: Trading pair symbol
+            - date: Trading date
+            - open_price, high, low, close, volume: OHLCV prices
+            - predicted, actual: Signal values (-1, 0, 1)
+            - correct: Whether prediction matched actual movement
+            - metrics: Dictionary of accuracy statistics
+            - accuracy_by_type: Per-signal-type accuracy breakdown
+    """
     ohlcv = Table(
         title=f"{result['pair']} Market Data — {result['date']}",
         box=box.ROUNDED,
@@ -128,13 +157,36 @@ def logging_result(result: dict):
     delta = result["close"] - result["open_price"]
     color = "green" if delta > 0 else ("red" if delta < 0 else "yellow")
     word = "increased" if delta > 0 else ("decreased" if delta < 0 else "unchanged")
-    console.print(f"\n[bold]Analysis:[/bold]")
+    console.print("\n[bold]Analysis:[/bold]")
     console.print(f"  • Price [{color}]{word}[/{color}] by {abs(delta):.4f}")
 
     accuracy_metrics(result["pair"], result["metrics"], result["accuracy_by_type"])
 
 
-def accuracy_metrics(pair: str, metrics: dict, by_type: dict):
+def accuracy_metrics(
+    pair: str,
+    metrics: dict[str, Any],
+    by_type: dict[int, dict[str, Any]],
+) -> None:
+    """Display accuracy metrics and performance statistics.
+
+    Shows overall accuracy, rolling accuracies, and per-signal-type breakdown.
+
+    Args:
+        pair: Trading pair symbol.
+        metrics: Dictionary with keys:
+            - total_predictions: Total predictions made
+            - completed_predictions: Predictions with actual values logged
+            - correct_count: Number of correct predictions
+            - incorrect_count: Number of incorrect predictions
+            - overall_accuracy: Overall accuracy percentage
+            - rolling_accuracy_10: Last 10 predictions accuracy (if n >= 10)
+            - rolling_accuracy_30: Last 30 predictions accuracy (if n >= 30)
+        by_type: Dictionary mapping signal (-1, 0, 1) to per-signal stats:
+            - count: Number of that signal type
+            - correct: Number correct for that signal
+            - accuracy: Accuracy percentage for that signal
+    """
     console.print("\n[bold cyan]═══ Accuracy Metrics ═══[/bold cyan]\n")
 
     t = Table(title=f"{pair} Overall Performance", box=box.ROUNDED)
