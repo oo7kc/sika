@@ -29,7 +29,7 @@ class LoggingPipeline:
                 f"No prediction log at {self.log_path}. Make predictions first."
             )
         log = pd.read_csv(self.log_path, index_col=0, parse_dates=[0])
-        log.index = pd.Index(pd.to_datetime(log.index).dt.date)  # type: ignore
+        log.index = pd.Index(log.index.date)  # type: ignore
         log.index.name = "Date"
         return log
 
