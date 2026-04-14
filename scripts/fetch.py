@@ -108,51 +108,93 @@ class MarketDataPipeline:
         logger.info(f"Fetched {len(df)} FX bars for {self.pair}")
         return df
 
-    def fetch_current_price(self) -> float:
-        """Fetch most recent price from 1-min bar close."""
-        logger.info(f"Fetching current price for {self.pair}")
-        url = (
-            _CRYPTO_URL
-            if is_crypto(self.pair)
-            else _FX_URL.format(ticker=self.pair.lower())
-        )
-        params: dict[str, str] = {"resampleFreq": "1Min"}
-        if not is_crypto(self.pair):
-            params["startDate"] = self.config.START_DATE
-        else:
-            params["tickers"] = self.pair.lower()
+    # def fetch_current_price(self) -> float:
+    #     """Fetch most recent price from 1-min bar close."""
+    #     logger.info(f"Fetching current price for {self.pair}")
+    #     url = (
+    #         _CRYPTO_URL
+    #         if is_crypto(self.pair)
+    #         else _FX_URL.format(ticker=self.pair.lower())
+    #     )
+    #     params: dict[str, str] = {"resampleFreq": "1Min"}
+    #     if not is_crypto(self.pair):
+    #         params["startDate"] = self.config.START_DATE
+    #     else:
+    #         params["tickers"] = self.pair.lower()
 
-        payload = self._get(url, **params)
-        bars = self._extract_bars(payload)
-        if not bars:
-            raise RuntimeError(f"No current price data returned for {self.pair}")
+    #     payload = self._get(url, **params)
+    #     bars = self._extract_bars(payload)
+    #     if not bars:
+    #         raise RuntimeError(f"No current price data returned for {self.pair}")
 
-        latest = bars[-1]
-        price = float(latest.get("close") or latest.get("open") or 0)
-        logger.info(f"Current price for {self.pair}: {price}")
-        return price
+    #     latest = bars[-1]
+    #     price = float(latest.get("close") or latest.get("open") or 0)
+    #     logger.info(f"Current price for {self.pair}: {price}")
+    #     return price
 
     def fetch_open_for_date(self, prediction_date: date) -> float:
-        """Return open price for date, current price for today."""
-        if prediction_date == date.today():
-            return self.fetch_current_price()
+        """Return open price for date, or most recent open if unavailable."""
+        logger.debug(
+            f"Attempting to fetch daily open price for date: {prediction_date}"
+        )
 
         history = self.fetch_history()
-        ts = pd.Timestamp(prediction_date)
-        if ts in history.index:
-            return float(history.loc[ts, "Open"])
+        logger.debug(
+            f"History fetched for open price. Number of records: {len(history)}"
+        )
 
-        logger.warning(f"{prediction_date} not in history — using most recent bar")
+        ts = pd.Timestamp(prediction_date)
+
+        # Ensure prediction_date is a timezone-aware Timestamp, matching history.index
+        if history.index.tz is not None:
+            ts = ts.tz_localize(history.index.tz)
+        elif ts.tz is not None:
+            ts = ts.tz_localize(None)
+
+        logger.debug(f"Prediction Timestamp (ts) for open: {ts}, timezone: {ts.tz}")
+        logger.debug(
+            f"History index start: {history.index.min()}, end: {history.index.max()}, timezone: {history.index.tz}"
+        )
+
+        if ts in history.index:
+            open_price = float(history.loc[ts, "Open"])
+            logger.debug(f"Daily open price found for {prediction_date}: {open_price}")
+            return open_price
+
+        # Fallback if the specific date's open is not found in history
+        # This might happen if prediction_date is in the future beyond what the API provides
+        # or if the date itself is a holiday/weekend not in the trading history.
+        logger.warning(
+            f"Daily open price not available for {prediction_date} in history — using most recent bar's open as fallback."
+        )
         return float(history.iloc[-1]["Open"])
 
     def fetch_actuals_for_date(self, prediction_date: date) -> dict | None:
         """Return completed OHLCV bar for past date, or None if unavailable."""
+        logger.debug(f"Attempting to fetch actuals for date: {prediction_date}")
         history = self.fetch_history()
+        logger.debug(f"History fetched. Number of records: {len(history)}")
+
+        # Ensure prediction_date is a timezone-aware Timestamp, matching history.index
         ts = pd.Timestamp(prediction_date)
+        if history.index.tz is not None:
+            ts = ts.tz_localize(history.index.tz)
+        elif ts.tz is not None:
+            ts = ts.tz_localize(None)  # Remove timezone if history.index is naive
+
+        logger.debug(f"Prediction Timestamp (ts): {ts}, timezone: {ts.tz}")
+        logger.debug(
+            f"History index start: {history.index.min()}, end: {history.index.max()}, timezone: {history.index.tz}"
+        )
+
         if ts not in history.index:
-            logger.warning(f"Actual data not available for {prediction_date}")
+            logger.warning(
+                f"Actual data not available for {prediction_date} in history."
+            )
             return None
+
         row = history.loc[ts]
+        logger.debug(f"Actuals found for {prediction_date}: {row.to_dict()}")
         return {
             "open": float(row["Open"]),
             "high": float(row["High"]),
