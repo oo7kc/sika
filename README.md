@@ -1,4 +1,4 @@
-# Sika: Machine Learning Forex Trend Prediction
+# Sika: A Trend Prediction System
 
 > **A local-first CLI tool for financial market analysis and trend prediction using advanced technical indicators**
 
