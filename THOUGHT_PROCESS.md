@@ -46,15 +46,36 @@ in the project plan.
 - Read-only MQL5 exporters and an independent Python validator are implemented.
 - A fresh schema-version-2 M15/H1 sample export passed the validator. This
   confirms that the terminal-to-file-to-validator path works end to end.
-- A resumable five-year M1/M15/H1 exporter and independent whole-range validator
-  are implemented and installed. October and November 2021 have been exported;
-  the remaining months can resume without replacing them.
+- The full 60-month M1/M15/H1 history from October 2021 through September 2026
+  has been exported. Every monthly bundle passed the structural and identity
+  checks, but the dataset remains under review until its unexplained gaps are
+  reconciled.
 - Historical data exists near the October 2021 five-year boundary for M1, M15,
   and H1. This proves availability at that point, not uninterrupted coverage.
-- The next milestone is to run the backfill and reconcile any gaps with broker
-  holiday or maintenance schedules. Model research has not started.
+- The next milestone is to reconcile the reported gaps with broker holiday and
+  maintenance schedules. Model research has not started.
 
 ## Change journal
+
+### 2026-10-06 — Completed the five-year history export
+
+**What changed:** The resumable exporter produced all 60 monthly bundles from
+October 2021 through September 2026. The independent validator checked every
+manifest and M1, M15, and H1 file across the complete range.
+
+**Evidence:** The audit accepted 1,765,731 M1 bars, 118,063 M15 bars, and 29,548
+H1 bars. All file identities, account metadata, monthly boundaries, price rows,
+ordering, and checksums passed. The audit result is `REVIEW_REQUIRED`, with 166
+M1, 61 M15, and 37 H1 gaps still requiring explanation.
+
+**What it means:** The export mechanism and monthly dataset are structurally
+sound. This is not yet permission to train a model: many gaps resemble known
+holiday closures, while smaller isolated gaps may be broker-feed or market-data
+interruptions and must be classified explicitly rather than silently filled.
+
+**Next:** Match the gaps against historical gold trading hours and holidays,
+record which closures are expected, and decide how genuine feed gaps will be
+represented during research.
 
 ### 2026-10-06 — Corrected a false manifest-write failure
 
