@@ -1,0 +1,123 @@
+# Sika decision journal
+
+This file explains how Sika is evolving in language that does not require a
+software or trading background. It records the reasoning behind important
+ideas and changes, what evidence supports them, and what remains uncertain.
+
+It is not a record of private internal reasoning or a replacement for the
+project's technical documents:
+
+- `PLAN.md` says what we intend to build and in what order.
+- `docs/research-contract.md` defines the research and trading rules.
+- `docs/operations/mt5.md` explains how to operate the MT5 tooling.
+- This journal explains why meaningful decisions were made and what they mean.
+
+## Current direction
+
+Sika is being rebuilt from a tool that predicted a broad daily market direction
+into a selective trade-planning system for `XAUUSDm` on an Exness Standard demo
+account. A future call should say whether the idea is long or short, where an
+entry remains valid, where the stop-loss and take-profit are, the risk/reward,
+when the idea expires, and how reliable the model believes the exact setup is.
+
+The system is currently read-only. It collects and validates market data but
+cannot place, modify, or close a trade. Telegram delivery and any use with real
+money come only after offline research and paper-trading evidence pass the gates
+in the project plan.
+
+## Decisions currently in force
+
+- Start with `XAUUSDm`, not `XAUUSD247` or several markets at once.
+- Use completed M15 candles for possible entries and H1 candles for broader
+  market context.
+- Observe the full 08:00–16:00 New York session, allow new candidates only from
+  08:15 through 14:00, and use the final two hours for monitoring existing ideas.
+- Use the Exness MT5 feed intended for execution so research prices and eventual
+  discretionary trading prices are comparable.
+- Keep execution manual. Confidence may filter weak ideas, but it must not be
+  used to justify larger leverage.
+- Treat “no trade” as a valid and expected result.
+- Fail closed when data, account identity, timing, or file integrity is doubtful.
+
+## Current state
+
+- The research contract and staged plan are written but still require review.
+- MT5 works through Wine and is connected to the Exness Standard demo account.
+- Read-only MQL5 exporters and an independent Python validator are implemented.
+- Historical data exists near the October 2021 five-year boundary for M1, M15,
+  and H1. This proves availability at that point, not uninterrupted coverage.
+- The next engineering milestone is a resumable historical backfill with
+  continuity checks and source manifests. Model research has not started.
+
+## Change journal
+
+### 2026-10-06 — Established this decision journal
+
+**What changed:** Added this document and a repository rule requiring it to be
+updated alongside meaningful implementation, research, product, or operating
+changes.
+
+**Why:** The plan and research contract are necessarily detailed. We also need a
+single place where a non-technical reader can understand why the project is
+changing and whether an idea is merely proposed, approved, or already built.
+
+**What it means:** Future changes are incomplete until their plain-language
+rationale, effect, evidence, and next step are recorded here. Small formatting
+or typo-only edits do not need their own entry.
+
+### 2026-10-06 — Hardened the read-only MT5 data boundary
+
+**What changed:** The exporter and validator now accept only the agreed
+`XAUUSDm` Exness demo context and reject incomplete history, malformed prices,
+unexpected file columns, suspicious time differences, future-dated quotes, and
+incorrect account metadata. A safety test prevents the MQL5 scripts from gaining
+trade execution or sensitive-account capabilities unnoticed.
+
+**Why:** A model can appear successful when its input data are incomplete,
+mis-timed, or taken from a different account or instrument. It is safer to stop
+than to quietly continue with data that no longer represent the experiment.
+
+**Evidence:** Seventeen focused tests pass, both MQL5 scripts compile with zero
+errors and zero warnings, and the installed scripts match the reviewed sources.
+
+**Next:** Produce a fresh schema-version-2 export before using sample data in the
+backfill work.
+
+### 2026-10-06 — Confirmed older Exness history is reachable
+
+**What changed:** A bounded MT5 probe found M1, M15, and H1 data around
+1 October 2021. The server reports history beginning in June 2018.
+
+**Why:** The research plan calls for roughly five years of market history. Before
+building a large downloader, we needed to know whether the chosen broker could
+supply data near that boundary.
+
+**What it means:** A five-year study appears feasible, but a proper backfill must
+still prove that the interval is continuous and identify genuine market closures
+versus missing data.
+
+### 2026-10-04 — Chose executable trade plans over daily direction
+
+**Idea:** Replace the old “market up or down today” output with a precise trade
+candidate containing an entry, stop-loss, take-profit, expiry, risk/reward, and
+calibrated probability.
+
+**Why:** A daily direction can be correct yet still be impossible to trade
+profitably. A trade plan can be tested against actual bid/ask prices, transaction
+costs, timing, and risk.
+
+**Status:** Approved as the product direction. Exact thresholds remain draft
+until the research contract is reviewed and frozen.
+
+## How to add the next entry
+
+Add the newest entry at the top of the change journal and explain:
+
+1. What changed or what idea is being considered.
+2. Why it matters, without relying on technical shorthand.
+3. Whether it is proposed, approved, implemented, tested, or rejected.
+4. What evidence or validation exists.
+5. What should happen next or what remains uncertain.
+
+Never include passwords, account numbers, Telegram tokens, personal data, or
+other secrets in this journal.

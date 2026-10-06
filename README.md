@@ -7,6 +7,8 @@ data acquisition and validation; it does not place trades or publish signals.
 Current project documents:
 
 - [`PLAN.md`](PLAN.md) — staged delivery and promotion gates.
+- [`THOUGHT_PROCESS.md`](THOUGHT_PROCESS.md) — plain-language decisions,
+  reasoning, evidence, and current progress.
 - [`docs/research-contract.md`](docs/research-contract.md) — normative v0 research
   and risk decisions.
 - [`docs/operations/mt5.md`](docs/operations/mt5.md) — MT5/Wine operating runbook.

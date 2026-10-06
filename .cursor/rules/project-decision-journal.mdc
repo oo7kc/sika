@@ -1,0 +1,22 @@
+---
+description: Keep Sika's plain-language decision journal current
+alwaysApply: true
+---
+
+# Project decision journal
+
+- Read `THOUGHT_PROCESS.md` before making material project changes.
+- Update it in the same change whenever implementing or changing product
+  behavior, architecture, research rules, data contracts, safety boundaries,
+  operations, or a material project idea.
+- Keep the `Current direction`, `Decisions currently in force`, and `Current
+  state` sections accurate.
+- Add a dated entry at the top of `Change journal` stating what changed, why it
+  matters, its status, supporting evidence, remaining uncertainty, and next step.
+- Write for non-technical readers. Define unavoidable trading or engineering
+  terms in plain language.
+- Clearly distinguish proposals from approved decisions and completed work.
+- Link to detailed plans, contracts, code, or tests instead of copying them.
+- Do not log trivial formatting changes, raw debugging transcripts, credentials,
+  account identifiers, tokens, personal data, or private chain-of-thought.
+- A material change is not complete until the journal is updated.
