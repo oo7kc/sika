@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from ..configuration import ConfigurationError
+from ..logging_config import command_logger
 
 EXPECTED_SYMBOL = "XAUUSDm"
 EXPECTED_ACCOUNT_PROFILE = "Standard"
@@ -441,6 +443,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        logger = command_logger("mt5_probe")
+    except (ConfigurationError, OSError) as exc:
+        print(f"CONFIGURATION ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    logger.info("MT5 probe started", extra={"event": "probe_started"})
+    try:
         report = run_probe(
             load_mt5_api(),
             symbol=args.symbol,
@@ -451,8 +460,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.output:
             write_report(report, args.output)
         print(json.dumps(report, indent=2, sort_keys=True))
+        logger.info("MT5 probe completed", extra={"event": "probe_completed"})
         return 0
-    except ProbeError as exc:
+    except (ProbeError, OSError) as exc:
+        logger.error("MT5 probe failed: %s", exc, extra={"event": "probe_failed"})
         print(f"MT5 probe failed: {exc}", file=sys.stderr)
         return 2
 

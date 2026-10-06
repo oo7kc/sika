@@ -4,7 +4,6 @@ import re
 import unittest
 from pathlib import Path
 
-
 SCRIPTS = tuple(
     sorted((Path(__file__).resolve().parents[1] / "mt5" / "Scripts").glob("*.mq5"))
 )

@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from ..configuration import ConfigurationError
+from ..logging_config import command_logger
 from .mt5_backfill import (
     DEFAULT_END_MONTH_EXCLUSIVE,
     DEFAULT_START_MONTH,
@@ -24,7 +26,6 @@ from .mt5_backfill import (
     GapAudit,
     validate_backfill,
 )
-
 
 CALENDAR_SCHEMA = "sika-xauusdm-closure-calendar-v1"
 REPORT_SCHEMA = "sika-mt5-gap-reconciliation-v1"
@@ -534,6 +535,13 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        logger = command_logger("mt5_reconcile_gaps")
+    except (ConfigurationError, OSError) as exc:
+        print(f"CONFIGURATION ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    logger.info("gap reconciliation started", extra={"event": "reconciliation_started"})
+    try:
         audit = validate_backfill(
             args.root,
             start_month=args.start_month,
@@ -544,6 +552,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = reconcile_backfill_gaps(audit, calendar)
         write_reconciliation(report, args.output)
     except (BackfillValidationError, GapReconciliationError, OSError) as exc:
+        logger.error(
+            "gap reconciliation failed: %s",
+            exc,
+            extra={"event": "reconciliation_failed"},
+        )
         print(f"INVALID: {exc}", file=sys.stderr)
         return 1
 
@@ -565,12 +578,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{item.quarantined_out_of_session_count}"
             )
     if report.status == "quarantine_required":
+        logger.warning(
+            "gap reconciliation completed with status quarantine_required",
+            extra={"event": "reconciliation_completed"},
+        )
         print(
             "QUARANTINE REQUIRED: downstream research must exclude every listed "
             "session before this dataset can pass the data-quality gate.",
             file=sys.stderr,
         )
         return 4
+    logger.info(
+        "gap reconciliation completed with status reconciled",
+        extra={"event": "reconciliation_completed"},
+    )
     return 0
 
 

@@ -10,8 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sika.market_data.mt5_backfill import (
-    BackfillValidationError,
     EXPECTED_TIMEFRAMES,
+    BackfillValidationError,
     main,
     validate_backfill,
 )

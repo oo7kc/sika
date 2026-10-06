@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-
 BAR_COLUMNS = (
     "time_epoch",
     "open",

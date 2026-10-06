@@ -14,8 +14,9 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
+from ..configuration import ConfigurationError
+from ..logging_config import command_logger
 from .bar_csv import BarCsvValidationError, BarGap, audit_bar_csv
-
 
 SCHEMA = "sika-mt5-backfill-month-v1"
 EXPECTED_SYMBOL = "XAUUSDm"
@@ -625,6 +626,13 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        logger = command_logger("mt5_validate_backfill")
+    except (ConfigurationError, OSError) as exc:
+        print(f"CONFIGURATION ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    logger.info("backfill validation started", extra={"event": "validation_started"})
+    try:
         audit = validate_backfill(
             args.root,
             start_month=args.start_month,
@@ -634,6 +642,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.output:
             write_report(audit, args.output)
     except (BackfillValidationError, OSError) as exc:
+        logger.error(
+            "backfill validation failed: %s",
+            exc,
+            extra={"event": "validation_failed"},
+        )
         print(f"INVALID: {exc}", file=sys.stderr)
         return 1
 
@@ -652,12 +665,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"review_gaps={len(item.review_required_gaps)}"
             )
     if audit.status == "review_required":
+        logger.warning(
+            "backfill validation completed with status review_required",
+            extra={"event": "validation_completed"},
+        )
         print(
             "REVIEW REQUIRED: reconcile the listed gaps with historical "
             "holiday/maintenance schedules before research use.",
             file=sys.stderr,
         )
         return 3
+    logger.info(
+        "backfill validation completed with status structurally_valid",
+        extra={"event": "validation_completed"},
+    )
     return 0
 
 

@@ -7,7 +7,6 @@ ideas and changes, what evidence supports them, and what remains uncertain.
 It is not a record of private internal reasoning or a replacement for the
 project's technical documents:
 
-- `PLAN.md` says what we intend to build and in what order.
 - `docs/research-contract.md` defines the research and trading rules.
 - `docs/operations/mt5.md` explains how to operate the MT5 tooling.
 - This journal explains why meaningful decisions were made and what they mean.
@@ -23,7 +22,7 @@ when the idea expires, and how reliable the model believes the exact setup is.
 The system is currently read-only. It collects and validates market data but
 cannot place, modify, or close a trade. Telegram delivery and any use with real
 money come only after offline research and paper-trading evidence pass the gates
-in the project plan.
+in the research contract.
 
 ## Decisions currently in force
 
@@ -41,7 +40,8 @@ in the project plan.
 
 ## Current state
 
-- The research contract and staged plan are written but still require review.
+- The research contract is written but still requires review as implementation
+  reaches each promotion gate.
 - MT5 works through Wine and is connected to the Exness Standard demo account.
 - Read-only MQL5 exporters and an independent Python validator are implemented.
 - A fresh schema-version-2 M15/H1 sample export passed the validator. This
@@ -59,6 +59,33 @@ in the project plan.
   canonical research dataset. Model research has not started.
 
 ## Change journal
+
+### 2026-10-06 — Prepared the active project for collaboration
+
+**What changed:** Separated the old daily-direction prototype from the active
+`XAUUSDm` system, removed it from active packaging and dependencies, replaced
+the product README, and added contributor and architecture guidance. Operational
+logging now has validated settings and can write bounded, rotating JSON-line
+logs without copying arbitrary fields that might contain secrets.
+
+**Why:** A new contributor should see one product direction and one supported
+workflow. Historical code is still recoverable, but it must not appear to be an
+approved model or silently influence the current environment. Research settings
+also need to remain reviewable instead of being hidden in a private `.env` file.
+
+**What it means:** The repository root now represents only the system we are
+building. The frozen prototype remains under `archive/daily_direction_v0`, and
+local prototype data, models, logs, and credentials remain ignored. Versioned
+research configuration and operational logging have separate responsibilities.
+
+**Evidence:** A clean locked environment installs with only the active package;
+the legacy scientific stack is no longer installed. Thirty-eight focused tests
+and the repository static checks pass. The publishable-file inventory confirms
+that archived credentials, generated models, data, logs, caches, and compiled
+MQL5 files remain excluded.
+
+**Next:** Implement the canonical dataset builder that enforces all reconciled
+session exclusions.
 
 ### 2026-10-06 — Reconciled holidays and quarantined unexplained gaps
 

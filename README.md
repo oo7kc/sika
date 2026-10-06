@@ -1,408 +1,153 @@
 # Sika
 
-Sika is being rebuilt as a research-validated `XAUUSDm` trade-plan system using
-the Exness MT5 execution feed. The current milestone is strictly read-only market
-data acquisition and validation; it does not place trades or publish signals.
+Sika is an in-progress, research-validated trade-planning system for `XAUUSDm`
+on an Exness Standard account. Its intended output is a discretionary trade
+plan: direction, entry, stop-loss, take-profit, risk/reward, expiry, and a
+calibrated confidence estimate. Telegram delivery is planned after the research
+and paper-trading gates pass.
 
-Current project documents:
+Sika is currently a **read-only market-data system**. It cannot place, modify,
+or close trades, and it does not yet produce a trade call. Treat every current
+command as data collection or validation tooling, not trading advice.
 
-- [`PLAN.md`](PLAN.md) — staged delivery and promotion gates.
-- [`THOUGHT_PROCESS.md`](THOUGHT_PROCESS.md) — plain-language decisions,
-  reasoning, evidence, and current progress.
-- [`docs/research-contract.md`](docs/research-contract.md) — normative v0 research
-  and risk decisions.
-- [`docs/operations/mt5.md`](docs/operations/mt5.md) — MT5/Wine operating runbook.
+## Current status
 
-New implementation lives under `src/sika/` and `mt5/`. The original daily
-direction application is preserved below as historical baseline code only. Its
-models, accuracy claims, commands, and outputs are not approved for research,
-paper signals, or trading decisions.
+The MT5-to-research data boundary is working end to end:
 
-## Preserved legacy baseline
+- the terminal is restricted to the agreed `XAUUSDm` Exness demo context;
+- MQL5 scripts export completed M1, M15, and H1 bars without order access;
+- Python validators check identity, ranges, ordering, prices, and checksums;
+- the five-year backfill covers October 2021 through September 2026; and
+- gap reconciliation produces explicit session exclusions instead of filling
+  or ignoring missing data.
 
-> **Unsupported for decision use:** the following sections document the original
-> project and are retained only so its behavior remains reproducible.
+The dataset remains fail-closed. The next milestone is a canonical dataset
+builder that proves excluded sessions cannot enter research. Model development,
+confidence calibration, Telegram delivery, and trade execution have not begun.
 
-[![Python](https://img.shields.io/badge/Python-3.12.9-3776AB?logo=python&logoColor=white)](https://python.org)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.7.2-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
-[![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)](.)
-[![CLI](https://img.shields.io/badge/Interface-CLI-blue.svg)](.)
+The authoritative project documents are:
 
----
+- [Decision journal](THOUGHT_PROCESS.md) — plain-language decisions, evidence,
+  current state, and next steps.
+- [Research contract](docs/research-contract.md) — strategy, risk, evaluation,
+  and promotion rules.
+- [Architecture](docs/architecture.md) — system boundaries and reproducibility
+  decisions.
+- [MT5 operations](docs/operations/mt5.md) — Wine/MT5 setup, export, validation,
+  and failure recovery.
+- [Contributing](CONTRIBUTING.md) — the local quality workflow and review rules.
 
-## 🎯 Overview
+## Product contract
 
-**Sika** is a machine learning system designed to predict foreign exchange and commodity market trends using neural networks and technical indicators. Built as a local-first CLI application, it provides a clean, intuitive interface for training models, making predictions, and tracking metrics.
+When implemented, a trade call must contain all of the following or resolve to
+`NO_TRADE`:
 
+- exact instrument and long/short direction;
+- a bounded entry rule rather than an untradeable daily prediction;
+- stop-loss, take-profit, and explicit risk/reward;
+- a session-aware expiry;
+- calibrated confidence for that exact setup; and
+- the assumptions needed to reproduce the call.
 
----
+The initial operating window is 08:00–16:00 New York time. New M15 candidates
+may be created from 08:15 through 14:00, using H1 context; the final two hours
+are for monitoring existing plans. Execution remains manual until a separate,
+explicitly reviewed execution phase is approved.
 
-## ✨ Features
+## Repository layout
 
-### Technical Features
-
-- **Feature Engineering**: TTM Trend, MACD, RSI, ADX, Stochastic RSI, and INC/DEC
-- **Model Architecture**: Multi-layer perceptron
-- **Data Processing**: Min-Max Scaling
-- **Model Persistence**: Serialized models and scalers as .pkl files
-- **Comprehensive Logging**: Logging with detailed execution traces
-
----
-
-## 📊 Project Metrics
-
-### Performance Characteristics
-
-| Metric | Value |
-|--------|-------|
-| **Model Type** | Multi-Layer Perceptron Classifier |
-| **Training Algorithm** | L-BFGS Optimizer |
-| **Default Iterations** | 10,000 |
-| **Feature Count** | 7 technical indicators |
-| **Train/Test Split** | 80/20 |
-| **Typical Accuracy** | 80-90% (market-dependent) |
-
-### Stack Overview
-
-```
-Python 3.12.9
-├── Data Processing
-│   ├── pandas (2.3.3)
-│   └── numpy (2.3.4)
-├── Machine Learning
-│   ├── scikit-learn (1.7.2)
-│   ├── scipy (1.17.1)
-│   └── ta-lib (0.6.8)
-└── CLI & Display
-    ├── rich (14.2.0)
-    └── colorama (0.4.6)
+```text
+config/                 versioned research inputs and closure calendars
+docs/                   architecture, research, and operating documentation
+mt5/Scripts/            read-only MQL5 exporters and probes
+src/sika/               active Python package
+tests/                  safety and data-contract regression tests
+archive/                frozen predecessor source; excluded from active tooling
+data/, logs/, models/    ignored local outputs, with tracked placeholders only
 ```
 
----
+The predecessor daily-direction prototype is frozen under
+[`archive/daily_direction_v0`](archive/daily_direction_v0/README.md). It is not
+part of the active package, dependency lock, test suite, or product claims.
 
-## 🚀 Quick Start
+## Development setup
 
-### Prerequisites
+Prerequisites:
 
 - Python 3.12.9
-- uv package manager
+- [uv](https://docs.astral.sh/uv/)
+- MT5 only for terminal-facing workflows
 
-### Installation
-
-```bash
-# Clone or download the repository
-git clone <repository-url>
-cd sika
-
-# Create virtual environment
-uv sync
-
-# Install dependencies
-uv pip install -r requirements.txt
-
-# Create configuration file
-cp .env.example .env
-```
-
-### Your First Prediction
+Create the locked Linux development environment:
 
 ```bash
-# Start interactive mode (recommended)
-uv run main.py
-
-# Or run directly
-uv run main.py --mode predict --pair XAUUSD --open 2650.50
+uv sync --locked
 ```
 
----
+On native 64-bit Windows, install the optional MetaTrader5 bridge as well:
 
-## ⚙️ Configuration
+```powershell
+uv sync --locked --extra windows-mt5
+```
 
-### Environment Variables
-
-Create a `.env` file in the project root:
+Run the focused regression suite and static checks:
 
 ```bash
-# Data Directories
-RAW_DATA_DIR=data/raw
-PROCESSED_DATA_DIR=data/processed
-MODEL_DIR=models
-LOGS_DIR=logs
-
-# Trading Pairs (comma-separated)
-TRADING_PAIRS=XAUUSD,EURUSD,GBPUSD
-
-# Data Configuration
-START_DATE=2020-01-01
-RANDOM_STATE=42
-
-# Model Hyperparameters
-TRAIN_SPLIT=0.8
-ACTIVATION=logistic
-SOLVER=lbfgs
-LEARNING_RATE=adaptive
-LEARNING_RATE_INIT=0.03
-MAX_ITER=10000
-MOMENTUM=0.2
-EARLY_STOPPING=True
-
-# Feature Selection
-SELECTED_FEATURES=TTM_TRND_6,MACD_12_26_9,RSI_14,ADX_14,STOCHRSIk_10_14_3_3,INC_1,DEC_1
-
-TIINGO_KEY = your_tiingo_api_key
+uv run python -m unittest discover -s tests -v
+uvx --from ruff==0.15.20 ruff check .
 ```
 
----
+The MQL5 sources must additionally compile in the supported MetaEditor build
+with zero errors and zero warnings. Compiled `.ex5` files are local build
+artifacts and are not committed.
 
-## 🏗️ Architecture
+## Data workflow
 
-### System Pipeline
-
-```mermaid
-flowchart TD
-    A["<b>data/raw/*.csv</b><br/>(OHLC CSV files)"]
-    B["<b>Preprocessing & Feature Eng.</b><br/>scripts/data.py<br/>scripts/indicators.py<br/>(scaling, selected features)"]
-    C["<b>Training (models)</b><br/>scripts/train.py"]
-    D["<b>Config & CLI</b><br/>.env + config.py<br/>main.py (CLI entrypoint)"]
-    E["<b>Prediction Engine</b><br/>scripts/predict.py<br/>loads models/PAIR_mlp_classifier.pkl"]
-    F["<b>Output: CLI display & logs</b><br/>scripts/display.py & logs/sika.log"]
-
-    A --> B
-    B --> C
-    B --> D
-    D --> E
-    E --> F
-```
-
-- High-level pipeline: raw data → preprocessing & indicators → train → model artifacts → prediction → CLI display & logs.
-
----
-
-## 📁 Project Structure
-
-```
-sika/
-├── main.py                 # CLI entry point
-├── config.py              # Configuration management
-├── pyproject.toml         # Project metadata
-├── requirements.txt       # Python dependencies
-│
-├── scripts/               # Core modules
-│   ├── __init__.py
-│   ├── train.py          # Training pipeline
-│   ├── predict.py        # Prediction engine
-│   ├── data.py           # Data loading & preprocessing
-│   ├── indicators.py     # Technical indicators
-│   ├── log.py            # Accuracy logging
-│   ├── logger.py         # File logging setup
-│   └── display.py        # CLI display utilities
-│
-├── data/                 # Data storage
-│   ├── raw/              # Original OHLC data (CSV)
-│   └── processed/        # Processed features
-│
-├── models/               # Model persistence
-│   ├── PAIR_mlp_classifier.pkl
-│   ├── PAIR_scaler.pkl
-│   └── PAIR_metadata.json
-│
-└── logs/                 # Execution logs
-    └── sika.log
-```
-
----
-
-## 📈 Technical Indicators
-
-Sika uses 7 strategically selected technical indicators:
-
-### 1. **TTM Trend (6-period)**
-- Measures trend strength
-- Input: Last 6 candles
-- Output: Scaled trend intensity
-
-### 2. **MACD (12, 26, 9)**
-- Momentum oscillator
-- Parameters: Fast=12, Slow=26, Signal=9
-- Captures trend changes and momentum
-
-### 3. **RSI (14-period)**
-- Relative Strength Index
-- Range: 0-100 (Overbought/Oversold)
-- Identifies reversal opportunities
-
-### 4. **ADX (14-period)**
-- Average Directional Index
-- Measures trend strength
-- Range: 0-100 (Strong/Weak)
-
-### 5. **Stochastic RSI**
-- RSI applied to RSI values
-- Period: 10, Smoothing: 3
-- Momentum confirmation
-
-### 6. **Price Increase Ratio (INC_1)**
-- Percentage of up candles
-- 1-period lookback
-- Recent bullish pressure
-
-### 7. **Price Decrease Ratio (DEC_1)**
-- Percentage of down candles
-- 1-period lookback
-- Recent bearish pressure
-
----
-
-## 🔧 Customization
-
-### Adding New Trading Pairs
-
-1. Update `.env` configuration:
-   ```bash
-   TRADING_PAIRS=XAUUSD,EURUSD,YOUR_NEW_PAIR
-   ```
-
-2. Train model:
-   ```bash
-   python main.py --mode train --pair YOUR_NEW_PAIR
-   ```
-
-### Modifying Technical Indicators
-
-Edit `scripts/indicators.py` to add or modify indicators:
-
-```python
-def custom_indicator(df):
-    """Add your custom indicator here"""
-    return calculated_values
-```
-
-Then update `SELECTED_FEATURES` in `.env`.
-
-### Tuning Model Hyperparameters
-
-Modify `.env` values:
+The detailed operator procedure is in [the MT5 runbook](docs/operations/mt5.md).
+The primary validation commands are:
 
 ```bash
-# For more training: increase MAX_ITER
-MAX_ITER=15000
+uv run sika-mt5-validate-export path/to/export_manifest.json
 
-# For faster convergence: adjust learning rate
-LEARNING_RATE_INIT=0.05
+uv run sika-mt5-validate-backfill path/to/backfill \
+  --output data/xauusdm-backfill-audit.json
 
-# For stronger regularization: increase MOMENTUM
-MOMENTUM=0.5
+uv run sika-mt5-reconcile-gaps path/to/backfill \
+  --calendar config/market_data/xauusdm-closures-v1.json \
+  --output data/xauusdm-gap-reconciliation.json
 ```
 
----
+Important nonzero statuses are deliberate safety outcomes:
 
-## 📊 Model Performance
+- exit `3`: structurally valid backfill still has gaps requiring review;
+- exit `4`: reconciliation succeeded, but downstream research must enforce the
+  reported quarantine and exclusion dates.
 
-### Typical Characteristics
+Never synthesize bars or add a closure date merely to make these commands pass.
 
-- **Accuracy Range**: 80-90% (market-dependent)
-- **Training Time**: 30-120 seconds per pair
-- **Prediction Latency**: <100ms
-- **Memory Footprint**: 100-200MB per session
-- **Data Requirements**: 3-5 years historical data
+## Configuration and logs
 
-> **Note**: Accuracy depends heavily on market conditions, pair volatility, and indicator stability. Regular retraining recommended when market regimes change.
+Research assumptions live in reviewed, version-controlled files under
+`config/`. Operational logging is the only environment-configured behavior:
 
----
-
-## 🐛 Troubleshooting
-
-### Issue: "Model not found for pair"
 ```bash
-# Solution: Train the model first
-python main.py --mode train --pair XAUUSD
+export SIKA_LOG_LEVEL=INFO
+export SIKA_LOG_FORMAT=json
+export SIKA_LOG_FILE=logs/sika.jsonl
 ```
 
-### Issue: "Insufficient data"
-```bash
-# Solution: Ensure raw CSV exists in data/raw/
-# Format should be: PAIRRAW.csv
-# Example: XAUUSDRAW.csv
-```
+Supported levels are `DEBUG`, `INFO`, `WARNING`, `ERROR`, and `CRITICAL`;
+supported formats are `text` and `json`. Logs rotate at 5 MiB with five backups.
+JSON output contains a timestamp, level, logger, message, and approved event
+name. Arbitrary record fields are not serialized, which reduces accidental
+credential leakage.
 
-### Issue: "Feature mismatch during prediction"
-```bash
-# Solution: Retrain model with current indicators
-python main.py --mode train --pair XAUUSD
-```
+Local data, reports, logs, compiled MQL5 binaries, models, virtual environments,
+and `.env` files are ignored. Commit schemas, calendars, source, and tests—not
+broker credentials, account numbers, Telegram tokens, or generated datasets.
 
-### Issue: High memory usage
-```bash
-# Solution: Reduce MAX_ITER in .env
-MAX_ITER=5000
-```
+## Safety notice
 
-### Issue: Import errors
-```bash
-# Solution: Reinstall dependencies
-pip install -r requirements.txt
-```
-
----
-
-## 🎯 Use Cases
-
-### Portfolio Analysis
-Monitor multiple forex pairs and commodities with consistent ML-based analysis.
-
-### Strategy Development
-Test trading ideas and validate signals against historical predictions.
-
-### Risk Analysis
-Identify trend changes early with high-accuracy predictions.
-
-### Market Learning
-Understand technical analysis and ML applications in finance.
-
-### Data Exploration
-Analyze market patterns and indicator relationships.
-
----
-
-## 🏆 Tips for Best Results
-
-1. **Use Quality Data**: Ensure OHLC data is complete and accurate
-2. **Retrain Regularly**: Models degrade over time as market conditions change
-3. **Verify Predictions**: Log actual results to track accuracy
-4. **Test Thoroughly**: Backtest strategies before live use
-5. **Monitor Accuracy**: Track metrics over time to catch degradation
-6. **Optimize Hyperparameters**: Experiment with different settings for your pairs
-7. **Handle Missing Data**: Clean data before training
-
----
-
-## 📚 Technical Stack
-
-| Component | Version | Purpose |
-|-----------|---------|---------|
-| Python | 3.12.9 | Runtime environment |
-| scikit-learn | 1.7.2 | Machine learning |
-| pandas | 2.3.3 | Data manipulation |
-| numpy | 2.3.4 | Numerical computing |
-| ta-lib | 0.6.8 | Technical analysis |
-| rich | 14.2.0 | Terminal UI |
-| joblib | 1.5.3 | Model serialization |
-| python-dotenv | 1.2.2 | Configuration |
-
----
-
-## 📞 Support
-
-For questions or issues:
-reachout at: newmankelvin14@gmail.com
-
----
-
-## ⚠️ Disclaimer
-
-**Sika is provided for educational and research purposes only.** Trading in financial markets carries substantial risk of loss. Past performance is not indicative of future results. Always conduct thorough backtesting and due diligence before using predictions for live trading. The authors are not responsible for trading losses or decisions made based on predictions from this system.
-
-
----
-
-⭐ If you find this project useful, consider giving it a star!
+Trading leveraged products can result in substantial loss. Passing software
+tests proves only that the code follows its declared contracts; it does not
+prove profitability or suitability for live trading.

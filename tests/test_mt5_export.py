@@ -9,7 +9,6 @@ from pathlib import Path
 
 from sika.market_data.mt5_export import ExportValidationError, validate_export
 
-
 EXPORT_ID = "20261006T073318Z"
 # Exact UTC hour boundary so both H1 and M15 fixture bars are aligned.
 GENERATED_AT = 1_800_000_000

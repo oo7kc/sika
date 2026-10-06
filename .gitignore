@@ -11,7 +11,13 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+build/
+dist/
 mt5/**/*.ex5
+
+# Frozen prototype runtime state is kept locally for reference only. It may
+# contain credentials, generated models, source data, and logs.
+archive/daily_direction_v0/runtime/
 
 data/*
 !data/.gitkeep

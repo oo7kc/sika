@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 from sika.market_data.mt5_probe import ProbeError, run_probe
 
-
 NOW = datetime(2026, 10, 2, 16, 7, tzinfo=UTC)
 
 

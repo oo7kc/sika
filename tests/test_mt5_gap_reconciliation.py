@@ -19,7 +19,6 @@ from sika.market_data.mt5_gap_reconciliation import (
     reconcile_backfill_gaps,
 )
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PRODUCTION_CALENDAR = (
     REPOSITORY_ROOT / "config" / "market_data" / "xauusdm-closures-v1.json"

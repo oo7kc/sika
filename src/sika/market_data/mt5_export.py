@@ -17,8 +17,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..configuration import ConfigurationError
+from ..logging_config import command_logger
 from .bar_csv import BAR_COLUMNS, BarCsvValidationError, audit_bar_csv
-
 
 EXPECTED_COLUMNS = BAR_COLUMNS
 EXPECTED_TIMEFRAMES = {"M15": 15 * 60, "H1": 60 * 60}
@@ -334,8 +335,20 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        logger = command_logger("mt5_validate_export")
+    except (ConfigurationError, OSError) as exc:
+        print(f"CONFIGURATION ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    logger.info("export validation started", extra={"event": "validation_started"})
+    try:
         audit = validate_export(args.manifest, expected_symbol=args.expected_symbol)
     except ExportValidationError as exc:
+        logger.error(
+            "export validation failed: %s",
+            exc,
+            extra={"event": "validation_failed"},
+        )
         print(f"INVALID: {exc}", file=sys.stderr)
         return 1
 
@@ -355,6 +368,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         for warning in audit.warnings:
             print(f"WARNING: {warning}")
+    logger.info(
+        "export validation completed with status valid",
+        extra={"event": "validation_completed"},
+    )
     return 0
 
 
