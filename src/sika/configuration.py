@@ -1,8 +1,4 @@
-"""Validated operational configuration for Sika commands.
-
-Research assumptions are intentionally excluded from this module. Values that
-can change research results belong in version-controlled files under ``config/``.
-"""
+"""Validated operational configuration for Sika commands."""
 
 from __future__ import annotations
 

@@ -1,15 +1,7 @@
 # Sika decision journal
 
-This file explains how Sika is evolving in language that does not require a
-software or trading background. It records the reasoning behind important
+This file explains how Sika is evolving. It records the reasoning behind important
 ideas and changes, what evidence supports them, and what remains uncertain.
-
-It is not a record of private internal reasoning or a replacement for the
-project's technical documents:
-
-- `docs/research-contract.md` defines the research and trading rules.
-- `docs/operations/mt5.md` explains how to operate the MT5 tooling.
-- This journal explains why meaningful decisions were made and what they mean.
 
 ## Current direction
 
@@ -26,7 +18,7 @@ in the research contract.
 
 ## Decisions currently in force
 
-- Start with `XAUUSDm`, not `XAUUSD247` or several markets at once.
+- Starting with `XAUUSDm`.
 - Use completed M15 candles for possible entries and H1 candles for broader
   market context.
 - Observe the full 08:00–16:00 New York session, allow new candidates only from
