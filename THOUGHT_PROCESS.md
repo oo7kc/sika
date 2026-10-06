@@ -50,12 +50,38 @@ in the project plan.
   has been exported. Every monthly bundle passed the structural and identity
   checks, but the dataset remains under review until its unexplained gaps are
   reconciled.
+- A versioned closure calendar and gap-reconciliation audit are implemented.
+  They identify 76 New York sessions that downstream research must exclude,
+  including 24 sessions quarantined because of unexplained feed gaps.
 - Historical data exists near the October 2021 five-year boundary for M1, M15,
   and H1. This proves availability at that point, not uninterrupted coverage.
-- The next milestone is to reconcile the reported gaps with broker holiday and
-  maintenance schedules. Model research has not started.
+- The next milestone is to enforce the reconciled session exclusions in the
+  canonical research dataset. Model research has not started.
 
 ## Change journal
+
+### 2026-10-06 — Reconciled holidays and quarantined unexplained gaps
+
+**What changed:** Added a versioned `XAUUSDm` closure calendar with named
+official sources and an independent reconciliation tool. It matches observed
+gaps to recognized metal-market holidays, detects whether unexplained gaps touch
+the New York operating window, and produces an explicit list of sessions that
+future research must exclude.
+
+**Evidence:** Of the original review gaps, 57 M1, 49 M15, and 32 H1 gaps align
+with calendar dates. The tool leaves 109 M1, 12 M15, and 5 H1 gaps quarantined
+rather than pretending their cause is known. These resolve to 24 quarantine
+session dates and 76 total excluded dates after holiday and early-close sessions
+are included. Thirty-four focused repository tests pass.
+
+**What it means:** The gap inventory is now reproducible and actionable, but the
+dataset still fails closed. Calendar correlation supports excluding an abnormal
+session; it does not prove the broker's exact historical schedule. Unmatched
+gaps remain recorded as feed gaps, and no missing bar is fabricated.
+
+**Next:** The canonical dataset builder must consume every excluded date and a
+test must prove that it cannot emit a research candidate from those sessions.
+Only then can this data-quality gate be considered passed.
 
 ### 2026-10-06 — Completed the five-year history export
 

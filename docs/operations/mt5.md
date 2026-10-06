@@ -101,6 +101,37 @@ candidates rather than silently discarded. [Exness documents](https://get.exness
 that its servers use UTC+0 and that gold is usually closed during rollover;
 historical holidays still require explicit reconciliation.
 
+### Gap reconciliation
+
+Run the independent reconciliation stage after the structural audit:
+
+```bash
+uv run sika-mt5-reconcile-gaps \
+  "$HOME/.mt5/drive_c/Program Files/MetaTrader 5/MQL5/Files/Sika/backfill" \
+  --calendar config/market_data/xauusdm-closures-v1.json \
+  --output data/xauusdm-gap-reconciliation.json
+```
+
+The versioned calendar names its evidence and intentionally distinguishes a
+calendar-correlated closure from proof of exact historical Exness hours. The
+tool classifies every remaining gap as one of:
+
+- `calendar_correlated_closure`: an observed gap overlaps a documented
+  benchmark-metal holiday;
+- `quarantined_in_session_gap`: an unexplained gap overlaps Sika's 08:00–16:00
+  New York operating window; or
+- `quarantined_out_of_session_gap`: an unexplained gap outside that window.
+
+M15 or H1 gaps outside the operating window quarantine the next research
+session because they can contaminate context features. M1-only gaps outside the
+window are recorded but do not exclude a session because M1 is reserved for
+entry and barrier reconstruction during active trades.
+
+`QUARANTINE_REQUIRED` returns exit code 4. This is the expected fail-closed state
+until candidate construction consumes every `excluded_session_dates` entry.
+Never add a calendar date merely to make the command pass, and never synthesize
+bars to close a gap.
+
 The date-range exporter uses bar-open timestamps. MQL5
 [`CopyRates`](https://www.mql5.com/en/docs/series/copyrates) treats both
 date-range boundaries as inclusive, so the script requests the final second

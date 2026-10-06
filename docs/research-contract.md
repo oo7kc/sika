@@ -118,6 +118,12 @@ Reject or quarantine data containing:
 
 Missing data must fail closed. The pipeline must never replace a requested timestamp with the most recent available bar or price.
 
+Gap reconciliation must use a versioned, reviewable calendar with named sources.
+Calendar correlation is evidence of an expected market closure, not proof of the
+broker's exact historical schedule. A gap without calendar support must remain
+quarantined. Research may proceed only after downstream candidate construction
+enforces the resulting excluded-session dates; missing bars are never synthesized.
+
 ## 5. Information boundary
 
 At a signal timestamp `t`, features may use only:
