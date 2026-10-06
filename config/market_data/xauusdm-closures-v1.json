@@ -1,0 +1,303 @@
+{
+  "schema": "sika-xauusdm-closure-calendar-v1",
+  "symbol": "XAUUSDm",
+  "timezone": "America/New_York",
+  "coverage_start_date": "2021-10-01",
+  "coverage_end_date_exclusive": "2026-10-01",
+  "sources": [
+    {
+      "id": "cme-metals-2021",
+      "title": "CME Group 2021 Metals Product Guide and Calendar",
+      "url": "https://www.cmegroup.com/trading/metals/files/metals-prod-guide-2021.pdf",
+      "scope": "Official benchmark-metal calendar; corroborates market holidays, not exact historical Exness CFD hours."
+    },
+    {
+      "id": "cme-metals-2022",
+      "title": "CME Group 2022 Metals Product Guide and Calendar",
+      "url": "https://www.cmegroup.com/trading/metals/files/metals-prod-guide-2022.pdf",
+      "scope": "Official benchmark-metal calendar; corroborates market holidays, not exact historical Exness CFD hours."
+    },
+    {
+      "id": "cme-metals-2023",
+      "title": "CME Group 2023 Metals Product Guide and Calendar",
+      "url": "https://www.cmegroup.com/trading/metals/files/metals-prod-guide-2023.pdf",
+      "scope": "Official benchmark-metal calendar; corroborates market holidays, not exact historical Exness CFD hours."
+    },
+    {
+      "id": "cme-metals-2024",
+      "title": "CME Group 2024 Metals Product Guide and Calendar",
+      "url": "https://www.cmegroup.com/trading/metals/files/metals-prod-guide-2024.pdf",
+      "scope": "Official benchmark-metal calendar; corroborates market holidays, not exact historical Exness CFD hours."
+    },
+    {
+      "id": "cme-holiday-calendar",
+      "title": "CME Group Holiday and Trading Hours",
+      "url": "https://www.cmegroup.com/trading-hours.html",
+      "scope": "Official CME holiday schedules and benchmark trading hours used for 2025 and 2026 calendar corroboration."
+    },
+    {
+      "id": "exness-holiday-2026",
+      "title": "Exness Holiday Trading Hours",
+      "url": "https://get.exness.help/hc/en-us/articles/17923046759836-Holiday-trading-hours",
+      "scope": "Official Exness 2026 holiday list; hours are UTC+0 and subject to change."
+    },
+    {
+      "id": "exness-instrument-hours",
+      "title": "Exness Instrument Trading Hours",
+      "url": "https://get.exness.help/hc/en-us/articles/4405235684498-Instrument-trading-hours",
+      "scope": "Official Exness normal-hours and rollover policy; does not prove exact historical holiday hours."
+    }
+  ],
+  "closures": [
+    {
+      "date": "2021-11-25",
+      "name": "Thanksgiving Day",
+      "source_ids": ["cme-metals-2021", "exness-instrument-hours"]
+    },
+    {
+      "date": "2021-12-24",
+      "name": "Christmas Day observed",
+      "source_ids": ["cme-metals-2021", "exness-instrument-hours"]
+    },
+    {
+      "date": "2021-12-31",
+      "name": "New Year's Day observed",
+      "source_ids": ["cme-metals-2021", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-01-17",
+      "name": "Martin Luther King Jr. Day",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-02-21",
+      "name": "Presidents Day",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-04-15",
+      "name": "Good Friday",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-05-30",
+      "name": "Memorial Day",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-06-20",
+      "name": "Juneteenth observed",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-07-04",
+      "name": "Independence Day",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-09-05",
+      "name": "Labor Day",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-11-24",
+      "name": "Thanksgiving Day",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2022-12-26",
+      "name": "Christmas Day observed",
+      "source_ids": ["cme-metals-2022", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-01-02",
+      "name": "New Year's Day observed",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-01-16",
+      "name": "Martin Luther King Jr. Day",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-02-20",
+      "name": "Presidents Day",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-04-07",
+      "name": "Good Friday",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-05-29",
+      "name": "Memorial Day",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-06-19",
+      "name": "Juneteenth",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-07-04",
+      "name": "Independence Day",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-09-04",
+      "name": "Labor Day",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-11-23",
+      "name": "Thanksgiving Day",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2023-12-25",
+      "name": "Christmas Day",
+      "source_ids": ["cme-metals-2023", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-01-01",
+      "name": "New Year's Day",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-01-15",
+      "name": "Martin Luther King Jr. Day",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-02-19",
+      "name": "Presidents Day",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-03-29",
+      "name": "Good Friday",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-05-27",
+      "name": "Memorial Day",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-06-19",
+      "name": "Juneteenth",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-07-04",
+      "name": "Independence Day",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-09-02",
+      "name": "Labor Day",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-11-28",
+      "name": "Thanksgiving Day",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2024-12-25",
+      "name": "Christmas Day",
+      "source_ids": ["cme-metals-2024", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-01-01",
+      "name": "New Year's Day",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-01-20",
+      "name": "Martin Luther King Jr. Day",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-02-17",
+      "name": "Presidents Day",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-04-18",
+      "name": "Good Friday",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-05-26",
+      "name": "Memorial Day",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-06-19",
+      "name": "Juneteenth",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-07-04",
+      "name": "Independence Day",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-09-01",
+      "name": "Labor Day",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-11-27",
+      "name": "Thanksgiving Day",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2025-12-25",
+      "name": "Christmas Day",
+      "source_ids": ["cme-holiday-calendar", "exness-instrument-hours"]
+    },
+    {
+      "date": "2026-01-01",
+      "name": "New Year's Day",
+      "source_ids": ["cme-holiday-calendar", "exness-holiday-2026"]
+    },
+    {
+      "date": "2026-01-19",
+      "name": "Martin Luther King Jr. Day",
+      "source_ids": ["cme-holiday-calendar", "exness-holiday-2026"]
+    },
+    {
+      "date": "2026-02-16",
+      "name": "Washington's Birthday",
+      "source_ids": ["cme-holiday-calendar", "exness-holiday-2026"]
+    },
+    {
+      "date": "2026-04-03",
+      "name": "Good Friday",
+      "source_ids": ["cme-holiday-calendar", "exness-holiday-2026"]
+    },
+    {
+      "date": "2026-05-25",
+      "name": "Memorial Day",
+      "source_ids": ["cme-holiday-calendar", "exness-holiday-2026"]
+    },
+    {
+      "date": "2026-06-19",
+      "name": "Juneteenth",
+      "source_ids": ["cme-holiday-calendar", "exness-holiday-2026"]
+    },
+    {
+      "date": "2026-07-03",
+      "name": "Independence Day observed",
+      "source_ids": ["cme-holiday-calendar", "exness-holiday-2026"]
+    },
+    {
+      "date": "2026-09-07",
+      "name": "Labor Day",
+      "source_ids": ["cme-holiday-calendar", "exness-holiday-2026"]
+    }
+  ]
+}
