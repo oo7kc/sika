@@ -1,6 +1,25 @@
-# Sika: A Trend Prediction System
+# Sika
 
-> **A local-first CLI tool for financial market analysis and trend prediction using advanced technical indicators**
+Sika is being rebuilt as a research-validated `XAUUSDm` trade-plan system using
+the Exness MT5 execution feed. The current milestone is strictly read-only market
+data acquisition and validation; it does not place trades or publish signals.
+
+Current project documents:
+
+- [`PLAN.md`](PLAN.md) — staged delivery and promotion gates.
+- [`docs/research-contract.md`](docs/research-contract.md) — normative v0 research
+  and risk decisions.
+- [`docs/operations/mt5.md`](docs/operations/mt5.md) — MT5/Wine operating runbook.
+
+New implementation lives under `src/sika/` and `mt5/`. The original daily
+direction application is preserved below as historical baseline code only. Its
+models, accuracy claims, commands, and outputs are not approved for research,
+paper signals, or trading decisions.
+
+## Preserved legacy baseline
+
+> **Unsupported for decision use:** the following sections document the original
+> project and are retained only so its behavior remains reproducible.
 
 [![Python](https://img.shields.io/badge/Python-3.12.9-3776AB?logo=python&logoColor=white)](https://python.org)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-1.7.2-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
