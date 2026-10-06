@@ -8,29 +8,19 @@ escape, and streams every row through the current research-contract invariants.
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import json
 import math
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from .bar_csv import BAR_COLUMNS, BarCsvValidationError, audit_bar_csv
 
-EXPECTED_COLUMNS = (
-    "time_epoch",
-    "open",
-    "high",
-    "low",
-    "close",
-    "tick_volume",
-    "spread_points",
-    "real_volume",
-)
+
+EXPECTED_COLUMNS = BAR_COLUMNS
 EXPECTED_TIMEFRAMES = {"M15": 15 * 60, "H1": 60 * 60}
 SCHEMA_VERSION = 2
 EXPECTED_ACCOUNT_PROFILE = "Standard"
@@ -134,35 +124,6 @@ def _safe_companion_path(parent: Path, filename: str, location: str) -> Path:
     return candidate
 
 
-def _parse_integer(value: str | None, location: str) -> int:
-    if value is None:
-        raise _fail(location, "missing value")
-    try:
-        return int(value)
-    except ValueError as exc:
-        raise _fail(location, f"invalid integer {value!r}") from exc
-
-
-def _parse_decimal(value: str | None, location: str) -> Decimal:
-    if value is None:
-        raise _fail(location, "missing value")
-    try:
-        result = Decimal(value)
-    except InvalidOperation as exc:
-        raise _fail(location, f"invalid decimal {value!r}") from exc
-    if not result.is_finite():
-        raise _fail(location, "must be finite")
-    return result
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _audit_csv(
     path: Path,
     timeframe: str,
@@ -171,110 +132,42 @@ def _audit_csv(
     generated_at_epoch: int,
 ) -> BarAudit:
     expected_count = _integer(manifest_bar, "count", f"bars.{timeframe}")
-    if expected_count <= 0:
-        raise _fail(f"bars.{timeframe}.count", "must be positive")
-
-    first_timestamp: int | None = None
-    previous_timestamp: int | None = None
-    last_timestamp: int | None = None
-    gap_count = 0
-    largest_gap = timeframe_seconds
-    count = 0
-
-    with path.open("r", encoding="utf-8-sig", newline="") as stream:
-        reader = csv.DictReader(stream)
-        if tuple(reader.fieldnames or ()) != EXPECTED_COLUMNS:
-            raise _fail(
-                path.name,
-                f"columns must be exactly {','.join(EXPECTED_COLUMNS)}",
-            )
-
-        for line_number, row in enumerate(reader, start=2):
-            location = f"{path.name}:{line_number}"
-            if None in row or len(row) != len(EXPECTED_COLUMNS):
-                raise _fail(location, "row has a different field count than the header")
-            timestamp = _parse_integer(row.get("time_epoch"), f"{location}.time_epoch")
-            prices = {
-                name: _parse_decimal(row.get(name), f"{location}.{name}")
-                for name in ("open", "high", "low", "close")
-            }
-            tick_volume = _parse_integer(
-                row.get("tick_volume"), f"{location}.tick_volume"
-            )
-            spread = _parse_integer(
-                row.get("spread_points"), f"{location}.spread_points"
-            )
-            real_volume = _parse_integer(
-                row.get("real_volume"), f"{location}.real_volume"
-            )
-
-            if timestamp <= 0:
-                raise _fail(f"{location}.time_epoch", "must be positive")
-            if timestamp % timeframe_seconds:
-                raise _fail(
-                    f"{location}.time_epoch",
-                    f"is not aligned to a {timeframe_seconds}-second boundary",
-                )
-            if any(price <= 0 for price in prices.values()):
-                raise _fail(location, "OHLC prices must be positive")
-            if prices["low"] > min(prices["open"], prices["close"]):
-                raise _fail(location, "low exceeds open or close")
-            if prices["high"] < max(prices["open"], prices["close"]):
-                raise _fail(location, "high is below open or close")
-            if prices["high"] < prices["low"]:
-                raise _fail(location, "high is below low")
-            if tick_volume < 0 or spread < 0 or real_volume < 0:
-                raise _fail(location, "volume and spread fields cannot be negative")
-
-            if previous_timestamp is not None:
-                delta = timestamp - previous_timestamp
-                if delta <= 0:
-                    raise _fail(location, "timestamps are not strictly increasing")
-                if delta % timeframe_seconds:
-                    raise _fail(
-                        location,
-                        "interval is not a whole number of timeframe periods",
-                    )
-                if delta > timeframe_seconds:
-                    gap_count += 1
-                    largest_gap = max(largest_gap, delta)
-
-            if first_timestamp is None:
-                first_timestamp = timestamp
-            previous_timestamp = timestamp
-            last_timestamp = timestamp
-            count += 1
-
-    if count != expected_count:
-        raise _fail(path.name, f"contains {count} rows; manifest declares {expected_count}")
-    if first_timestamp is None or last_timestamp is None:
-        raise _fail(path.name, "contains no data rows")
-
     declared_first = _integer(
         manifest_bar, "first_time_epoch", f"bars.{timeframe}"
     )
     declared_last = _integer(manifest_bar, "last_time_epoch", f"bars.{timeframe}")
-    if first_timestamp != declared_first:
-        raise _fail(path.name, "first timestamp differs from the manifest")
-    if last_timestamp != declared_last:
-        raise _fail(path.name, "last timestamp differs from the manifest")
     if not _boolean(
         manifest_bar, "forming_bar_excluded", f"bars.{timeframe}"
     ):
         raise _fail(f"bars.{timeframe}", "forming_bar_excluded must be true")
-    if last_timestamp + timeframe_seconds > generated_at_epoch:
-        raise _fail(path.name, "latest bar had not closed when the manifest was written")
+
+    try:
+        audit = audit_bar_csv(
+            path,
+            timeframe_seconds=timeframe_seconds,
+            expected_count=expected_count,
+            expected_first_time=declared_first,
+            expected_last_time=declared_last,
+            closed_before_or_at=generated_at_epoch,
+        )
+    except BarCsvValidationError as exc:
+        raise ExportValidationError(str(exc)) from exc
+
+    largest_gap = max(
+        (gap.interval_seconds for gap in audit.gaps),
+        default=timeframe_seconds,
+    )
 
     return BarAudit(
         timeframe=timeframe,
-        file=path.name,
-        sha256=_sha256(path),
-        count=count,
-        first_time_epoch=first_timestamp,
-        first_time_utc=_utc_iso(first_timestamp),
-        last_time_epoch=last_timestamp,
-        last_time_utc=_utc_iso(last_timestamp),
-        gap_count=gap_count,
+        file=audit.file,
+        sha256=audit.sha256,
+        count=audit.count,
+        first_time_epoch=audit.first_time_epoch,
+        first_time_utc=_utc_iso(audit.first_time_epoch),
+        last_time_epoch=audit.last_time_epoch,
+        last_time_utc=_utc_iso(audit.last_time_epoch),
+        gap_count=len(audit.gaps),
         largest_gap_seconds=largest_gap,
     )
 

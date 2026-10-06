@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 sika-mt5-probe = "sika.market_data.mt5_probe:main"
+sika-mt5-validate-backfill = "sika.market_data.mt5_backfill:main"
 sika-mt5-validate-export = "sika.market_data.mt5_export:main"
 
 [build-system]
