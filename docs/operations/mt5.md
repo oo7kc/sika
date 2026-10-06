@@ -58,6 +58,54 @@ around 1 October 2021 for M1, M15, and H1, then writes its redacted result to
 `MQL5/Files/Sika/probes/`. This establishes availability near the five-year
 boundary; it is not the historical backfill and does not prove full continuity.
 
+### Five-year historical backfill
+
+Run `SikaExportHistory` with its defaults to export the fixed v0 interval:
+
+```text
+2021-10-01 00:00 UTC <= bar open time < 2026-10-01 00:00 UTC
+```
+
+The script creates 60 monthly directories under `MQL5/Files/Sika/backfill/`.
+Each contains M1, M15, and H1 CSV files plus a manifest. The manifest is written
+last, so its presence is the completion marker for that month. Completed months
+are skipped on a later run; an interrupted month is rebuilt automatically.
+
+Keep `InpOverwriteCompleted` set to `false` during normal operation. Set it to
+`true` only when replacing a month that the independent validator rejected. In
+that mode the script removes the old completion marker before touching its CSV
+files, so a failed replacement cannot appear complete.
+
+The script reports each completed or skipped month in **Toolbox → Experts** and
+finishes with:
+
+```text
+Sika history backfill complete: months=60, exported=..., skipped=....
+```
+
+Validate the full range and write a durable receipt from Linux:
+
+```bash
+uv run sika-mt5-validate-backfill \
+  "$HOME/.mt5/drive_c/Program Files/MetaTrader 5/MQL5/Files/Sika/backfill" \
+  --output data/xauusdm-backfill-audit.json
+```
+
+`STRUCTURALLY_VALID` means all 60 monthly bundles, identities, ranges, file
+shapes, prices, ordering, and checksums passed with no unexplained gaps.
+`REVIEW_REQUIRED` means the files are structurally sound but one or more gaps
+must still be reconciled with historical holiday or maintenance schedules. It
+returns exit code 3 and must not be treated as research-ready. Weekend and the
+usual 21:00/22:00 UTC rollover closures are reported separately as closure
+candidates rather than silently discarded. [Exness documents](https://get.exness.help/hc/en-us/articles/4405235684498-Instrument-trading-hours)
+that its servers use UTC+0 and that gold is usually closed during rollover;
+historical holidays still require explicit reconciliation.
+
+The date-range exporter uses bar-open timestamps. MQL5
+[`CopyRates`](https://www.mql5.com/en/docs/series/copyrates) treats both
+date-range boundaries as inclusive, so the script requests the final second
+before the next month to implement a clean half-open monthly interval.
+
 ## Native Windows fallback
 
 On 64-bit Windows, the optional `sika-mt5-probe` command can attach to a signed-in

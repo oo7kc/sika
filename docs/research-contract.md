@@ -73,6 +73,10 @@ The official MT5 Python integration returns bar time, OHLC, tick volume, spread,
 
 - Target at least five years of M15 and H1 history where Exness makes it available.
 - Accept no less than three years for the first feasibility report.
+- The v0 backfill window is fixed to the 60 complete UTC calendar months from
+  `2021-10-01 00:00:00` through, but excluding, `2026-10-01 00:00:00`.
+- Export M1, M15, and H1 as matching monthly bundles. A month is complete only
+  when its three bar files and final completion manifest are present and valid.
 - Record the exact available interval rather than silently substituting another provider.
 - Start retaining live ticks prospectively because terminal tick-history depth may be more limited than bar history.
 - Increase MT5's chart-history limit before extraction and record the setting used.
