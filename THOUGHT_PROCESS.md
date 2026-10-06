@@ -44,12 +44,30 @@ in the project plan.
 - The research contract and staged plan are written but still require review.
 - MT5 works through Wine and is connected to the Exness Standard demo account.
 - Read-only MQL5 exporters and an independent Python validator are implemented.
+- A fresh schema-version-2 M15/H1 sample export passed the validator. This
+  confirms that the terminal-to-file-to-validator path works end to end.
 - Historical data exists near the October 2021 five-year boundary for M1, M15,
   and H1. This proves availability at that point, not uninterrupted coverage.
 - The next engineering milestone is a resumable historical backfill with
   continuity checks and source manifests. Model research has not started.
 
 ## Change journal
+
+### 2026-10-06 — Validated the complete sample-export path
+
+**What changed:** A fresh export from the updated MT5 script returned `VALID`
+when checked by the independent Python validator.
+
+**Why:** Finding old history was only one part of the data problem. Before
+building a multi-year downloader, we also needed proof that MT5 can produce the
+agreed files and that a separate program can verify their identity, timing,
+shape, completeness, and price integrity.
+
+**Status:** The small-sample data path is implemented and validated. This clears
+the gate for building the larger historical backfill; it does not yet validate
+five years of continuous data.
+
+**Next:** Build the resumable M1/M15/H1 backfill and its continuity report.
 
 ### 2026-10-06 — Established this decision journal
 
