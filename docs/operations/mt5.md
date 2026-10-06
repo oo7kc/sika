@@ -128,6 +128,11 @@ non-monotonic timestamps, a material server/GMT offset, altered CSV shape, or a
 missing completion file. Do not weaken a check to make an export pass. Correct
 the terminal state, allow history synchronization to finish, and rerun.
 
+An Experts message that reports a write failure with `error=0` indicates a
+script defect rather than an operating-system write error. Do not delete the
+monthly files or enable overwrite. Preserve the output, install the corrected
+script, and rerun normally so completed monthly manifests are skipped.
+
 Use the MT5 **Experts** or **Journal** tab for MQL5 messages. If those tabs are not
 visible, press `Ctrl+T` to open Toolbox. On Linux, the output directories can also
 be inspected directly without relying on the terminal UI.

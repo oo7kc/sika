@@ -36,6 +36,23 @@ class MQL5SafetyBoundaryTests(unittest.TestCase):
                         f"{script.name} crossed the read-only boundary: {capability}",
                     )
 
+    def test_text_writes_do_not_compare_byte_and_character_counts(self) -> None:
+        invalid_success_check = re.compile(
+            r"FileWriteString\s*\([^;]*\)\s*==\s*StringLen\s*\(",
+            flags=re.IGNORECASE,
+        )
+
+        for script in SCRIPTS:
+            source = script.read_text(encoding="utf-8")
+            with self.subTest(script=script.name):
+                self.assertIsNone(
+                    invalid_success_check.search(source),
+                    (
+                        f"{script.name} compares bytes written with character count; "
+                        "text-mode newline conversion makes that result unreliable"
+                    ),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

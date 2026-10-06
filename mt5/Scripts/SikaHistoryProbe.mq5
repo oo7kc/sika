@@ -3,7 +3,7 @@
 //| Read-only Exness XAUUSDm historical availability probe           |
 //+------------------------------------------------------------------+
 #property copyright "Sika"
-#property version   "1.000"
+#property version   "1.001"
 #property description "Probes M1/M15/H1 availability near the five-year boundary."
 #property description "Writes metadata only; it cannot place or manage orders."
 #property script_show_inputs
@@ -209,13 +209,15 @@ bool WriteProbe(const string probe_id,
                   relative_path,GetLastError());
       return false;
      }
-   const bool ok=(FileWriteString(handle,manifest)==StringLen(manifest));
+   ResetLastError();
+   const uint bytes_written=FileWriteString(handle,manifest);
+   const int write_error=GetLastError();
    FileFlush(handle);
    FileClose(handle);
-   if(!ok)
+   if(bytes_written==0 || write_error!=0)
      {
       PrintFormat("Sika history probe failed writing %s (error=%d).",
-                  relative_path,GetLastError());
+                  relative_path,write_error);
       return false;
      }
 

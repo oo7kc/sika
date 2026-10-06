@@ -47,13 +47,35 @@ in the project plan.
 - A fresh schema-version-2 M15/H1 sample export passed the validator. This
   confirms that the terminal-to-file-to-validator path works end to end.
 - A resumable five-year M1/M15/H1 exporter and independent whole-range validator
-  are implemented and installed. The real 60-month export has not been run yet.
+  are implemented and installed. October and November 2021 have been exported;
+  the remaining months can resume without replacing them.
 - Historical data exists near the October 2021 five-year boundary for M1, M15,
   and H1. This proves availability at that point, not uninterrupted coverage.
 - The next milestone is to run the backfill and reconcile any gaps with broker
   holiday or maintenance schedules. Model research has not started.
 
 ## Change journal
+
+### 2026-10-06 — Corrected a false manifest-write failure
+
+**What happened:** The first backfill runs wrote valid October and November 2021
+CSV files and manifests, but then reported that each manifest write had failed.
+The script compared the number of bytes written by MT5 with the number of text
+characters in the manifest. Windows-style newline conversion makes those counts
+different even when the file is written successfully.
+
+**What changed:** All three read-only MT5 scripts now treat a nonzero write with
+no MT5 error as success. The corrected sources and binaries are installed, and a
+focused regression test protects this rule.
+
+**Evidence:** Each script compiles with zero errors and zero warnings. The
+installed source and binary hashes match the reviewed builds. All 26 repository
+tests pass, and the independent validator accepted both existing monthly bundles
+as structurally sound while correctly reserving their market-closure gaps for
+later review.
+
+**Next:** Refresh MT5's Scripts list and rerun `SikaExportHistory` with the same
+defaults. It will skip October and November 2021 and resume at December 2021.
 
 ### 2026-10-06 — Implemented the resumable five-year backfill
 

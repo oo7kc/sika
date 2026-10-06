@@ -3,7 +3,7 @@
 //| Read-only Exness XAUUSDm bar exporter for the Sika research path |
 //+------------------------------------------------------------------+
 #property copyright "Sika"
-#property version   "1.000"
+#property version   "1.001"
 #property description "Exports closed XAUUSDm M15/H1 bars and a redacted manifest."
 #property description "This script contains no order-placement or position-management code."
 #property script_show_inputs
@@ -312,13 +312,15 @@ bool WriteManifest(const string export_id,
       return false;
      }
 
-   const bool ok=(FileWriteString(handle,manifest)==StringLen(manifest));
+   ResetLastError();
+   const uint bytes_written=FileWriteString(handle,manifest);
+   const int write_error=GetLastError();
    FileFlush(handle);
    FileClose(handle);
-   if(!ok)
+   if(bytes_written==0 || write_error!=0)
      {
       PrintFormat("Sika export failed while writing manifest %s (error=%d).",
-                  relative_path,GetLastError());
+                  relative_path,write_error);
       return false;
      }
 

@@ -3,7 +3,7 @@
 //| Resumable monthly Exness XAUUSDm M1/M15/H1 history exporter     |
 //+------------------------------------------------------------------+
 #property copyright "Sika"
-#property version   "1.000"
+#property version   "1.001"
 #property description "Exports completed monthly XAUUSDm M1/M15/H1 bundles."
 #property description "This script contains no order or position-management code."
 #property script_show_inputs
@@ -384,13 +384,15 @@ bool WriteManifest(const string directory,
                   relative_path,GetLastError());
       return false;
      }
-   const bool ok=(FileWriteString(handle,manifest)==StringLen(manifest));
+   ResetLastError();
+   const uint bytes_written=FileWriteString(handle,manifest);
+   const int write_error=GetLastError();
    FileFlush(handle);
    FileClose(handle);
-   if(!ok)
+   if(bytes_written==0 || write_error!=0)
      {
       PrintFormat("Sika backfill failed writing %s (error=%d).",
-                  relative_path,GetLastError());
+                  relative_path,write_error);
       return false;
      }
    return true;
